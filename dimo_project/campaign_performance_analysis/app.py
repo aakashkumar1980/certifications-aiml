@@ -68,7 +68,7 @@ def _initialize_system():
     """
     # Step 1: Generate mock data if missing
     if not os.path.exists(os.path.join(Settings.DATA_DIR, "campaigns.csv")):
-        from data.generate_mock_data import MockDataGenerator
+        from database.data.generate_mock_data import MockDataGenerator
         generator = MockDataGenerator()
         generator.generate_all()
 
