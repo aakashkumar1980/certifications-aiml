@@ -4,6 +4,107 @@ A RAG-based conversational AI assistant for credit card campaign performance ana
 
 ---
 
+## Pre-requisites
+
+Before you begin, you need to set up a few things. Follow these steps carefully:
+
+### 1. Python 3.10+
+
+This project requires Python 3.10 or higher. Check your version:
+
+```bash
+python3 --version
+```
+
+If the output is `Python 3.10.x` or higher, you are good to go. If not, see the [Python setup section](#python-setup-ubuntu) below.
+
+### 2. Get an Anthropic API Key (required)
+
+This project uses **Claude** by Anthropic as its AI brain. You need an API key to use it.
+
+**Step-by-step:**
+
+1. Go to [console.anthropic.com](https://console.anthropic.com)
+2. Click **Sign Up** (or **Log In** if you already have an account)
+3. After signing in, go to **API Keys** in the left sidebar (or visit [console.anthropic.com/settings/keys](https://console.anthropic.com/settings/keys))
+4. Click **Create Key**
+5. Give it a name (e.g., "campaign-analysis") and click **Create**
+6. **Copy the key immediately** — it starts with `sk-ant-api03-...` and will only be shown once
+
+> **Important:** The API key is a secret. Never commit it to Git, never share it publicly, and never paste it directly in your code.
+
+**Cost note:** Anthropic charges per API call. For this demo project, typical usage costs a few cents. You can set a spending limit in the Anthropic console under **Plans & Billing**.
+
+### 3. Configure the API Key in the Project
+
+Once you have the key, you need to tell the project about it:
+
+```bash
+# Navigate to the project directory
+cd dimo_project/campaign_performance_analysis
+
+# Copy the example env file to create your actual .env file
+cp .env.example .env
+
+# Open the .env file in any text editor
+nano .env       # or: vim .env / code .env / gedit .env
+```
+
+Inside the `.env` file, replace the placeholder with your real key:
+
+```
+ANTHROPIC_API_KEY=sk-ant-api03-YOUR-ACTUAL-KEY-HERE
+```
+
+Save and close the file. The application reads this file automatically at startup.
+
+> **How it works internally:** The `config/settings.py` module uses `python-dotenv` to load `.env` into environment variables. The agent module then reads `Settings.ANTHROPIC_API_KEY` when it creates the Claude LLM connection. If the key is missing, you will get a clear error message telling you to set it.
+
+### 4. Disk Space
+
+You need approximately **500 MB** of free disk space for:
+- Python packages (~200 MB)
+- The `all-MiniLM-L6-v2` sentence-transformer model (~90 MB, downloaded automatically on first run)
+- The SQLite database and ChromaDB vector store (~10 MB)
+
+### 5. No Other Infrastructure Needed
+
+That's it. No Docker, no cloud services, no database servers, no GPU. Everything runs locally on your machine using CPU only.
+
+---
+
+### Python Setup (Ubuntu)
+
+If you are on Ubuntu 22.04, Python 3.10 comes pre-installed. Verify:
+
+```bash
+python3 --version
+# Expected output: Python 3.10.12 (or similar)
+```
+
+If you want to install a newer version (optional — 3.10 works fine):
+
+```bash
+# Add the deadsnakes PPA (trusted source for Python versions)
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+
+# Install Python 3.12
+sudo apt install python3.12 python3.12-venv python3.12-dev
+
+# Verify
+python3.12 --version
+```
+
+To use the new version for this project, create the virtual environment with it:
+
+```bash
+python3.12 -m venv venv    # instead of python3 -m venv venv
+source venv/bin/activate
+```
+
+---
+
 ## What This Project Does (In Simple Terms)
 
 Credit card companies run marketing campaigns — things like "5% cashback on groceries" or "double miles on travel." After running these campaigns, business teams need to answer questions like:
