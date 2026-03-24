@@ -140,19 +140,19 @@ That's it. No Docker, no cloud services, no database servers. Everything runs lo
 
 ## How It Works — Sequence Diagram
 
-Here is what happens end-to-end when you ask the assistant a question:
+Here is what happens end-to-end when you send a request to the API:
 
 ```mermaid
 sequenceDiagram
-    actor User
-    participant UI as Streamlit Web UI
+    actor Client as Client (curl / Postman / App)
+    participant API as FastAPI Server
     participant Agent as LangChain Agent
     participant LLM as Claude LLM
     participant Tools as Agent Tools
     participant DB as SQLite / ChromaDB
 
-    User->>UI: 1. Type a question
-    UI->>Agent: 2. Forward question
+    Client->>API: 1. POST /ask {"question": "..."}
+    API->>Agent: 2. Forward question
     Agent->>LLM: 3. "Which tool should I use?"
     LLM-->>Agent: 4. "Use sql_query_tool"
     Agent->>Tools: 5. Call sql_query_tool
@@ -163,18 +163,18 @@ sequenceDiagram
     Tools-->>Agent: 10. Formatted results
     Agent->>LLM: 11. "Summarize these results"
     LLM-->>Agent: 12. Plain English answer
-    Agent-->>UI: 13. Display answer
-    UI-->>User: 14. See the answer!
+    Agent-->>API: 13. Return structured response
+    API-->>Client: 14. JSON response
 ```
 
 **In plain English:**
-1. You type a question like "Which campaign has the highest enrollment?"
-2. The web app sends it to the AI agent
+1. A client sends a POST request with a question to `/ask`
+2. The API forwards the question to the AI agent
 3. The agent asks Claude (the LLM) which tool to use
 4. Claude decides: "This is a data question, use the SQL tool"
 5. The SQL tool asks Claude to generate the correct SQL, then runs it against the database
 6. The agent sends the results back to Claude to write a friendly answer
-7. You see the answer in the chat window
+7. The API returns the answer as JSON
 
 ---
 
@@ -222,10 +222,13 @@ flowchart TD
 
 ```mermaid
 graph TB
-    subgraph UI["Streamlit Web UI (app.py)"]
-        Chat["Chat Interface"]
-        Sidebar["Campaign Sidebar"]
-        Quick["Quick Questions"]
+    subgraph API["FastAPI REST API (app.py)"]
+        Ask["POST /ask"]
+        AskSQL["POST /ask/sql"]
+        AskSearch["POST /ask/search"]
+        Campaigns["GET /campaigns"]
+        Summary["GET /campaigns/:id/summary"]
+        Health["GET /health"]
     end
 
     subgraph AgentLayer["LangChain Agent (agent/campaign_agent.py)"]
@@ -249,7 +252,11 @@ graph TB
         CSV["CSV Files"]
     end
 
-    Chat --> Exec
+    Ask --> Exec
+    Summary --> Exec
+    AskSQL --> T1
+    AskSearch --> T2
+    Campaigns --> SQLite
     Exec <--> Claude
     Exec --> T1
     Exec --> T2
@@ -261,7 +268,7 @@ graph TB
     Mock --> CSV
     CSV --> SQLite
 
-    style UI fill:#e3f2fd
+    style API fill:#e3f2fd
     style AgentLayer fill:#fff8e1
     style LLMLayer fill:#fce4ec
     style DataLayer fill:#e8f5e9
@@ -289,7 +296,7 @@ campaign_performance_analysis/
 ├── agent/
 │   ├── __init__.py
 │   └── campaign_agent.py          # LangChain agent with 3 tools
-├── app.py                         # Streamlit chat UI
+├── app.py                         # FastAPI REST API server
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -327,10 +334,51 @@ python rag/vector_store.py
 ## How to Run
 
 ```bash
-streamlit run app.py
+uvicorn app:app --reload --port 8000
 ```
 
-The app will open at `http://localhost:8501`.
+The API will be available at `http://localhost:8000`. Interactive API docs (Swagger UI) at `http://localhost:8000/docs`.
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/health` | Health check — shows status of DB, knowledge base, agent |
+| `GET` | `/campaigns` | List all campaigns with status, type, budget |
+| `GET` | `/campaigns/{id}` | Get details for a specific campaign |
+| `GET` | `/campaigns/{id}/summary` | AI-generated performance summary for a campaign |
+| `POST` | `/ask` | Ask any natural language question (agent picks the best tool) |
+| `POST` | `/ask/sql` | Ask a data question (forces SQL tool only) |
+| `POST` | `/ask/search` | Search the knowledge base directly (RAG only) |
+| `GET` | `/schema` | View the database schema |
+
+## Example API Calls
+
+```bash
+# Health check
+curl http://localhost:8000/health
+
+# List all campaigns
+curl http://localhost:8000/campaigns
+
+# Ask a question (agent decides which tool to use)
+curl -X POST http://localhost:8000/ask \
+  -H "Content-Type: application/json" \
+  -d '{"question": "Which campaign has the highest enrollment?"}'
+
+# Ask a data question (SQL only)
+curl -X POST http://localhost:8000/ask/sql \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What is the average ROI across all campaigns?"}'
+
+# Search the knowledge base
+curl -X POST http://localhost:8000/ask/search \
+  -H "Content-Type: application/json" \
+  -d '{"query": "What does redemption rate mean?", "n_results": 3}'
+
+# Get a campaign summary
+curl http://localhost:8000/campaigns/CMP-003/summary
+```
 
 ---
 
@@ -356,7 +404,7 @@ The app will open at `http://localhost:8501`.
 | Knowledge Store| ChromaDB                                 | Stores and searches campaign knowledge by meaning  |
 | Embeddings     | sentence-transformers (all-MiniLM-L6-v2) | Converts text into numerical meaning vectors       |
 | Database       | SQLite                                   | Stores campaign data (file-based, no server)       |
-| Web UI         | Streamlit                                | Chat interface in the browser                      |
+| REST API       | FastAPI + Uvicorn                        | HTTP endpoints with auto-generated Swagger docs    |
 | Mock Data      | Faker                                    | Generates realistic mock campaign data             |
 
 ---
