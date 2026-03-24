@@ -1,7 +1,7 @@
 """
 Campaign Agent Module for Campaign Performance Analysis.
 
-Implements a LangChain tool-calling agent powered by Claude that orchestrates
+Implements a LangGraph react agent powered by Claude that orchestrates
 three specialized tools to answer natural language questions about credit
 card campaign data:
 
@@ -12,8 +12,8 @@ card campaign data:
 3. **performance_summary_tool** — Combines database metrics with RAG context
    to produce a narrative performance report for a specific campaign.
 
-The agent maintains multi-turn conversation history via LangChain's
-``ConversationBufferMemory``, enabling follow-up questions.
+The agent maintains multi-turn conversation history via LangGraph's
+built-in message state, enabling follow-up questions.
 
 Example Usage::
 
@@ -29,10 +29,9 @@ import json
 
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
-from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.tools import tool
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain.memory import ConversationBufferMemory
+from langchain_core.messages import HumanMessage, SystemMessage
+from langgraph.prebuilt import create_react_agent
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import Settings
@@ -246,16 +245,13 @@ class CampaignAgent:
     """
     Conversational AI agent for campaign performance analysis.
 
-    Wraps a LangChain ``AgentExecutor`` with three domain-specific tools
+    Wraps a LangGraph react agent with three domain-specific tools
     (SQL, RAG, performance summary) and maintains chat history for
     multi-turn conversations.
 
     The agent uses Claude as its reasoning engine and follows a tool-calling
     pattern: it decides which tool(s) to invoke based on the user's question,
     executes them, and synthesizes the results into a business-friendly answer.
-
-    Attributes:
-        executor (AgentExecutor): The LangChain agent executor instance.
 
     Example::
 
@@ -269,9 +265,8 @@ class CampaignAgent:
         """
         Initialize the campaign agent with tools, prompt, and memory.
 
-        Creates a LangChain tool-calling agent backed by Claude, registers
-        all three tools, sets up the system prompt, and attaches a
-        conversation buffer memory for multi-turn context.
+        Creates a LangGraph react agent backed by Claude, registers
+        all three tools, and sets up the system prompt.
 
         Raises:
             ValueError: If ANTHROPIC_API_KEY is not configured.
@@ -279,28 +274,12 @@ class CampaignAgent:
         llm = _get_llm()
         tools = [sql_query_tool, rag_search_tool, performance_summary_tool]
 
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", SYSTEM_PROMPT),
-            MessagesPlaceholder(variable_name="chat_history"),
-            ("human", "{input}"),
-            MessagesPlaceholder(variable_name="agent_scratchpad"),
-        ])
-
-        agent = create_tool_calling_agent(llm, tools, prompt)
-
-        self.memory = ConversationBufferMemory(
-            memory_key="chat_history",
-            return_messages=True,
-        )
-
-        self.executor = AgentExecutor(
-            agent=agent,
+        self.agent = create_react_agent(
+            model=llm,
             tools=tools,
-            memory=self.memory,
-            verbose=True,
-            handle_parsing_errors=True,
-            max_iterations=Settings.AGENT_MAX_ITERATIONS,
+            prompt=SystemMessage(content=SYSTEM_PROMPT),
         )
+        self.chat_history = []
 
     def ask(self, question):
         """
@@ -320,20 +299,31 @@ class CampaignAgent:
                 - ``sources`` (list[str]): RAG document excerpts if rag_search_tool was used.
         """
         try:
-            result = self.executor.invoke({"input": question})
-            output = result.get("output", "I couldn't generate a response.")
+            self.chat_history.append(HumanMessage(content=question))
+
+            result = self.agent.invoke({"messages": self.chat_history})
+
+            messages = result.get("messages", [])
+
+            # The last message is the agent's final response
+            answer = ""
+            if messages:
+                answer = messages[-1].content if hasattr(messages[-1], "content") else str(messages[-1])
+
+            # Update chat history with the full conversation
+            self.chat_history = messages
 
             response = {
-                "answer": output,
+                "answer": answer,
                 "sql_query": None,
                 "sources": [],
             }
 
-            # Extract metadata from intermediate tool-call steps
-            for step in result.get("intermediate_steps", []):
-                if hasattr(step[0], "tool"):
-                    tool_name = step[0].tool
-                    tool_output = str(step[1])
+            # Extract metadata from tool call messages
+            for msg in messages:
+                if hasattr(msg, "name") and hasattr(msg, "content"):
+                    tool_name = getattr(msg, "name", "")
+                    tool_output = str(msg.content)
 
                     if tool_name == "sql_query_tool" and "SQL:" in tool_output:
                         lines = tool_output.split("\n")
@@ -360,10 +350,10 @@ class CampaignAgent:
         """
         Clear the conversation history.
 
-        Resets the memory buffer so the agent starts fresh without
+        Resets the chat history so the agent starts fresh without
         any prior conversation context.
         """
-        self.memory.clear()
+        self.chat_history = []
 
 
 # --- Module-Level Convenience Functions ---
