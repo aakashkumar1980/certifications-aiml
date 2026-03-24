@@ -91,6 +91,6 @@ class Settings:
         if not cls.ANTHROPIC_API_KEY:
             raise ValueError(
                 "ANTHROPIC_API_KEY is not set. "
-                "Please create a .env file from .env.example and add your API key."
+                "Please create a .env file from .env and add your API key."
             )
         return True

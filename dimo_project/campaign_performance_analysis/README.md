@@ -44,7 +44,7 @@ Once you have the key, you need to tell the project about it:
 cd dimo_project/campaign_performance_analysis
 
 # Copy the example env file to create your actual .env file
-cp .env.example .env
+cp .env .env
 
 # Open the .env file in any text editor
 nano .env       # or: vim .env / code .env / gedit .env
@@ -318,7 +318,7 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 # 4. Set your Anthropic API key
-cp .env.example .env
+cp .env .env
 # Edit .env and add your ANTHROPIC_API_KEY
 
 # 5. Generate mock data
