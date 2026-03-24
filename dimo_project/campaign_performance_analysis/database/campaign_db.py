@@ -3,7 +3,7 @@ SQLite Database Module for Campaign Performance Analysis.
 
 Provides three core capabilities:
 
-1. **Initialization** — Loads CSV files from the ``data/`` directory into
+1. **Initialization** — Loads CSV files from the ``database/data/`` directory into
    a SQLite database, creating one table per file.
 2. **Schema Introspection** — Returns a human-readable schema string
    including column types and sample rows for LLM context injection.

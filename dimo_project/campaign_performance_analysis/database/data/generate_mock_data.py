@@ -2,7 +2,7 @@
 Mock Data Generator for Campaign Performance Analysis.
 
 Generates realistic credit card campaign datasets using the Faker library
-and saves them as CSV files in the ``data/`` directory. This module is
+and saves them as CSV files in the ``database/data/`` directory. This module is
 designed to be run once during project setup to bootstrap the SQLite
 database with representative financial-services data.
 
@@ -15,10 +15,10 @@ Generated Files:
 Example Usage::
 
     # From the project root:
-    python data/generate_mock_data.py
+    python database/data/generate_mock_data.py
 
     # Or programmatically:
-    from data.generate_mock_data import MockDataGenerator
+    from database.data.generate_mock_data import MockDataGenerator
     generator = MockDataGenerator()
     generator.generate_all()
 """
@@ -32,7 +32,8 @@ import pandas as pd
 from faker import Faker
 
 # Add project root to path so config can be imported when run as script
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# (go up two levels: database/data/ -> database/ -> project_root/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 from config.settings import Settings
 
 
@@ -315,7 +316,7 @@ class MockDataGenerator:
         enrollments = self.generate_enrollments(campaigns)
         redemptions = self.generate_redemptions(enrollments, campaigns)
         performance = self.generate_performance(campaigns)
-        print("Done! All CSV files saved to data/ folder.\n")
+        print("Done! All CSV files saved to database/data/ folder.\n")
 
         return {
             "campaigns": campaigns,

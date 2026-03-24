@@ -30,7 +30,7 @@ A RAG-based conversational AI assistant for credit card campaign performance ana
 cd dimo_project/campaign_performance_analysis
 
 # 2. Create a virtual environment
-python -m venv venv
+python3 -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
 # 3. Install dependencies
@@ -41,7 +41,7 @@ cp .env.example .env
 # Edit .env and add your ANTHROPIC_API_KEY
 
 # 5. Generate mock data
-python data/generate_mock_data.py
+python database/data/generate_mock_data.py
 
 # 6. Initialize the database
 python database/campaign_db.py
@@ -76,12 +76,12 @@ campaign_performance_analysis/
 ├── config/
 │   ├── __init__.py
 │   └── settings.py              # Centralized configuration & constants
-├── data/
-│   ├── __init__.py
-│   └── generate_mock_data.py    # Faker-based CSV data generator
 ├── database/
 │   ├── __init__.py
-│   └── campaign_db.py           # SQLite loader, schema, safe query exec
+│   ├── campaign_db.py           # SQLite loader, schema, safe query exec
+│   └── data/
+│       ├── __init__.py
+│       └── generate_mock_data.py  # Faker-based CSV data generator
 ├── rag/
 │   ├── __init__.py
 │   └── vector_store.py          # ChromaDB knowledge base & search
