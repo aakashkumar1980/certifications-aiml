@@ -1,29 +1,31 @@
-# TUTORIAL: Python Concepts Used in This Project
+# TUTORIAL: Python Concepts for Beginners
 
-This tutorial explains the Python programming concepts, patterns, and libraries used in the **Campaign Performance Analysis** project. Written for someone learning Python who wants to understand how each piece works.
+A step-by-step guide to the Python programming concepts, patterns, and libraries commonly used in AI-powered applications. Written for someone learning Python who wants to understand how each piece works.
 
 ---
 
-## Project Structure — Why Organize Code This Way?
+## Step 1: Project Structure — Why Organize Code This Way?
+
+A well-organized Python project separates code by responsibility. Here is a typical layout:
 
 ```
-campaign_performance_analysis/
+my_project/
 ├── config/                 # Settings and constants
 │   ├── __init__.py
 │   └── settings.py
 ├── database/               # Everything data-related
 │   ├── __init__.py
-│   ├── campaign_db.py      # SQLite operations
-│   └── data/               # CSV data generation
+│   ├── db_manager.py       # Database operations
+│   └── data/               # Data generation / seed files
 │       ├── __init__.py
-│       └── generate_mock_data.py
-├── rag/                    # Vector store for AI knowledge
+│       └── generate_data.py
+├── rag/                    # AI knowledge store
 │   ├── __init__.py
 │   └── vector_store.py
 ├── agent/                  # AI agent logic
 │   ├── __init__.py
-│   └── campaign_agent.py
-├── app.py                  # Web UI entry point
+│   └── agent.py
+├── app.py                  # Application entry point
 ├── requirements.txt        # Python package dependencies
 └── .env.example            # Template for secrets
 ```
@@ -33,7 +35,7 @@ campaign_performance_analysis/
 Every folder with an `__init__.py` file becomes a **Python package**. This allows you to do imports like:
 
 ```python
-from database.campaign_db import execute_query
+from database.db_manager import execute_query
 from rag.vector_store import search_similar
 ```
 
@@ -41,113 +43,122 @@ Without `__init__.py`, Python would not recognize these folders as importable pa
 
 ---
 
-## Key Python Concepts Used
+## Step 2: Classes and Object-Oriented Programming (OOP)
 
-### 1. Classes and Object-Oriented Programming (OOP)
+### What is a class?
 
-**What:** A class is a blueprint for creating objects. Objects bundle related data and functions together.
-
-**Where we use it:** Every major module uses a class.
+A class is a blueprint for creating objects. Objects bundle related data and functions together.
 
 ```python
-# database/campaign_db.py
-class CampaignDatabase:
+class DatabaseManager:
     def __init__(self, db_path=None):   # Constructor — runs when you create an instance
         self.db_path = db_path          # Instance attribute — each object has its own
 
     def initialize(self):               # Method — a function that belongs to the object
-        # ... load CSVs into SQLite
+        # ... load data into the database
 
     def execute_query(self, sql):       # Another method
         # ... run a SQL query
 
 # Usage:
-db = CampaignDatabase()                # Create an instance (object)
-db.initialize()                        # Call a method on that object
-results = db.execute_query("SELECT * FROM campaigns")
+db = DatabaseManager("/path/to/data.db")  # Create an instance (object)
+db.initialize()                            # Call a method on that object
+results = db.execute_query("SELECT * FROM users")
 ```
 
-**Why classes instead of plain functions?**
+### Why classes instead of plain functions?
+
 - **Encapsulation** — Related data (db_path) and behavior (initialize, execute_query) live together
 - **Reusability** — You can create multiple instances with different settings
 - **Configuration** — Each instance can have different paths, parameters, etc.
 
 ---
 
-### 2. Decorators
+## Step 3: Decorators
 
-**What:** A decorator is a function that wraps another function to add extra behavior. Written with `@` above the function.
+### What is a decorator?
 
-**Where we use them:**
+A decorator is a function that wraps another function to add extra behavior. Written with `@` above the function.
 
 ```python
-# In campaign_agent.py — tells LangChain this function is a tool
+# Example 1: Register a function as an AI tool
 @tool
-def sql_query_tool(question: str) -> str:
+def search_database(question: str) -> str:
     """This docstring becomes the tool's description for the AI."""
     ...
 
-# In settings.py — makes a method work on the class itself, not an instance
+# Example 2: Make a method work on the class itself, not an instance
 @classmethod
 def validate(cls):
     ...
 
-# In app.py — tells Streamlit to cache the result and only run once
-@st.cache_resource
-def _initialize_system():
+# Example 3: Cache the result so the function only runs once
+@cache_resource
+def initialize_system():
     ...
 ```
 
-**Simple analogy:** A decorator is like gift wrapping. The gift (function) stays the same inside, but the wrapping (decorator) adds something extra — like caching, registration, or metadata.
+### Simple Analogy
+
+A decorator is like gift wrapping. The gift (function) stays the same inside, but the wrapping (decorator) adds something extra — like caching, registration, or metadata.
 
 ---
 
-### 3. Environment Variables and `.env` Files
+## Step 4: Environment Variables and `.env` Files
 
-**What:** Sensitive values (like API keys) should never be written directly in code. Instead, they are stored in environment variables.
+### What are environment variables?
 
-**How it works:**
+Sensitive values (like API keys) should never be written directly in code. Instead, they are stored in environment variables.
 
 ```python
 # .env file (NOT committed to git):
-ANTHROPIC_API_KEY=sk-ant-api03-xxxxx
+API_KEY=sk-xxxxx-your-secret-key
 
 # In Python code:
 from dotenv import load_dotenv
 import os
 
 load_dotenv()  # Reads .env file and sets environment variables
-api_key = os.getenv("ANTHROPIC_API_KEY")  # Read the value
+api_key = os.getenv("API_KEY")  # Read the value
 ```
 
-**Why?** If you accidentally push your code to GitHub, your API key stays safe because `.env` is listed in `.gitignore`.
+### Why?
+
+If you accidentally push your code to GitHub, your API key stays safe because `.env` is listed in `.gitignore`. The `.env.example` file (without real values) tells other developers which variables they need to set.
 
 ---
 
-### 4. The `if __name__ == "__main__"` Pattern
+## Step 5: The `if __name__ == "__main__"` Pattern
 
-**What:** This Python idiom lets a file work both as an importable module AND as a standalone script.
+### What does this do?
+
+This Python idiom lets a file work both as an importable module AND as a standalone script.
 
 ```python
-# database/campaign_db.py
-
-class CampaignDatabase:
+class DatabaseManager:
     ...
 
-# This block ONLY runs when you execute: python database/campaign_db.py
-# It does NOT run when another file does: from database.campaign_db import ...
+def init_database():
+    ...
+
+# This block ONLY runs when you execute: python db_manager.py
+# It does NOT run when another file does: from db_manager import ...
 if __name__ == "__main__":
     print("Initializing database...")
     init_database()
 ```
 
-**Why?** You can test each module individually by running it as a script, but when the main app imports it, the test code does not execute.
+### Why use it?
+
+You can test each module individually by running it as a script, but when the main app imports it, the test code does not execute.
 
 ---
 
-### 5. List Comprehensions and Dictionary Comprehensions
+## Step 6: List Comprehensions
 
-**What:** A compact way to build lists or dictionaries from existing data.
+### What is a list comprehension?
+
+A compact way to build lists from existing data.
 
 ```python
 # Traditional loop:
@@ -158,28 +169,27 @@ for col in columns:
 # Same thing as a list comprehension (one line):
 col_descriptions = [f"  {col[1]} ({col[2]})" for col in columns]
 
-# Dictionary from two lists (used in get_schema):
+# Dictionary from two lists:
 row_dict = dict(zip(col_names, row_values))
-# zip pairs them up: [("name", "CMP-001"), ("type", "cashback")]
-# dict converts pairs to: {"name": "CMP-001", "type": "cashback"}
+# zip pairs them up: [("name", "Alice"), ("age", 30)]
+# dict converts pairs to: {"name": "Alice", "age": 30}
 ```
 
 ---
 
-### 6. Context Managers (`with` Statement)
+## Step 7: Context Managers (`with` Statement)
 
-**What:** Ensures resources (files, database connections) are properly cleaned up, even if an error occurs.
+### What is a context manager?
+
+Ensures resources (files, database connections) are properly cleaned up, even if an error occurs.
 
 ```python
-# Used in app.py for Streamlit layout:
-with st.sidebar:
-    st.header("Campaigns")   # Everything indented goes in the sidebar
+# Opening a file — automatically closes when done:
+with open("data.csv", "r") as f:
+    content = f.read()
 
-with st.chat_message("assistant"):
-    st.markdown(result["answer"])   # Renders inside a chat bubble
-
-# The try/finally pattern in campaign_db.py is similar:
-conn = self._connect()
+# Database connection with try/finally (same idea):
+conn = connect_to_database()
 try:
     # ... do database work
 finally:
@@ -188,115 +198,127 @@ finally:
 
 ---
 
-### 7. Type Hints
+## Step 8: Type Hints
 
-**What:** Annotations that tell developers (and tools) what type a parameter or return value should be.
+### What are type hints?
+
+Annotations that tell developers (and tools) what type a parameter or return value should be.
 
 ```python
-def sql_query_tool(question: str) -> str:
-#                  ^^^^^^^^ ^^^    ^^^^^^
-#                  param    type   return type
-#                  name            (this function returns a string)
+def search_database(question: str) -> str:
+#                   ^^^^^^^^ ^^^    ^^^^^^
+#                   param    type   return type
+#                   name            (this function returns a string)
+
+def get_results(query: str, limit: int = 10) -> list[dict]:
+#               default value ^^^^^            returns a list of dicts
 ```
 
-**Why?** They serve as documentation and help IDEs provide better autocomplete. Python does not enforce them at runtime — they are hints, not rules.
+### Why use them?
+
+They serve as documentation and help IDEs provide better autocomplete. Python does not enforce them at runtime — they are hints, not rules.
 
 ---
 
-## Libraries Used — What Each One Does
+## Step 9: Key Libraries for AI Applications
 
-### pandas (`import pandas as pd`)
-
-**Purpose:** Data manipulation. Think of it as "Excel in Python."
+### pandas — "Excel in Python"
 
 ```python
-df = pd.read_csv("campaigns.csv")       # Read a CSV file into a DataFrame
-df.to_sql("campaigns", conn)            # Write DataFrame into a SQL table
-campaign = df.sample(1).iloc[0]          # Pick one random row
+import pandas as pd
+
+df = pd.read_csv("data.csv")        # Read a CSV file into a DataFrame
+df.to_sql("my_table", connection)    # Write DataFrame into a SQL table
+row = df.sample(1).iloc[0]          # Pick one random row
 ```
 
-**Key concept — DataFrame:** A table with rows and columns, like a spreadsheet. Each column can be accessed by name: `df["campaign_id"]`.
+**Key concept — DataFrame:** A table with rows and columns, like a spreadsheet. Each column can be accessed by name: `df["column_name"]`.
 
 ---
 
-### Faker (`from faker import Faker`)
-
-**Purpose:** Generates realistic fake data for testing.
+### Faker — Realistic test data
 
 ```python
+from faker import Faker
+
 fake = Faker()
-fake.date_between(start_date="-6m", end_date="+1m")  # Random date within range
+fake.name()                                          # "John Smith"
+fake.date_between(start_date="-6m", end_date="now")  # Random date in last 6 months
 ```
 
-**Why?** We need realistic campaign data for the demo, but we do not have access to real financial data (nor would we want to use it).
+Generates realistic fake data for testing. Useful when you need demo data but do not have (or should not use) real data.
 
 ---
 
-### sqlite3 (built-in)
-
-**Purpose:** A file-based SQL database built into Python. No server installation needed.
+### sqlite3 — Built-in database
 
 ```python
-conn = sqlite3.connect("campaign.db")   # Open (or create) database file
+import sqlite3
+
+conn = sqlite3.connect("my_database.db")   # Open (or create) database file
 cursor = conn.cursor()
-cursor.execute("SELECT * FROM campaigns")
-rows = cursor.fetchall()                 # Get all results
+cursor.execute("SELECT * FROM users")
+rows = cursor.fetchall()                    # Get all results
 conn.close()
 ```
 
+A file-based SQL database built into Python. No server installation needed — perfect for prototypes and demos.
+
 ---
 
-### Streamlit (`import streamlit as st`)
-
-**Purpose:** Turns Python scripts into interactive web apps with minimal code.
+### Streamlit — Instant web apps
 
 ```python
-st.title("Campaign AI Assistant")              # Display a title
-user_input = st.chat_input("Ask a question")   # Chat input box
-st.markdown(result["answer"])                   # Render markdown text
+import streamlit as st
+
+st.title("My AI Assistant")                         # Display a title
+user_input = st.chat_input("Ask a question...")     # Chat input box
+st.markdown(result)                                 # Render markdown text
 
 # Session state persists data across page refreshes:
 if "messages" not in st.session_state:
     st.session_state["messages"] = []
 ```
 
-**Key concept — `st.session_state`:** A dictionary that survives page reruns. Without it, Streamlit would forget everything each time the page refreshes. We use it to store chat history.
+**Key concept — `st.session_state`:** A dictionary that survives page reruns. Without it, Streamlit would forget everything each time the page refreshes. Used for storing chat history.
 
-**Key concept — `@st.cache_resource`:** A decorator that runs the function once and caches the result. Our database and AI agent are initialized only once, not on every page refresh.
+**Key concept — `@st.cache_resource`:** A decorator that runs the function once and caches the result. Database connections and AI models are initialized only once, not on every page refresh.
 
 ---
 
-### python-dotenv (`from dotenv import load_dotenv`)
-
-**Purpose:** Reads `.env` files and sets their values as environment variables.
+### python-dotenv — Load secrets from files
 
 ```python
-load_dotenv()  # Now os.getenv("ANTHROPIC_API_KEY") works
+from dotenv import load_dotenv
+
+load_dotenv()  # Now os.getenv("API_KEY") returns the value from .env
 ```
 
 ---
 
-## Common Patterns in This Project
+## Step 10: Common Patterns in AI Applications
 
 ### Pattern: Module-Level Convenience Functions
 
 ```python
-# At the bottom of campaign_db.py:
-_default_db = CampaignDatabase()         # Create one default instance
+# Create one default instance at module level:
+_default_db = DatabaseManager()
 
-def execute_query(sql):                   # Simple function that delegates to it
+# Expose simple functions that delegate to it:
+def execute_query(sql):
     return _default_db.execute_query(sql)
 ```
 
-**Why?** This lets other modules do `from database.campaign_db import execute_query` without needing to create and manage their own `CampaignDatabase` instance. Simple callers get a simple API; advanced callers can still use the class directly.
+**Why?** This lets other modules do `from database import execute_query` without needing to create and manage their own `DatabaseManager` instance. Simple callers get a simple API; advanced callers can still use the class directly.
 
 ### Pattern: Centralized Configuration
 
 ```python
-# config/settings.py
+# config/settings.py — single source of truth:
 class Settings:
-    DB_PATH = os.path.join(PROJECT_ROOT, "database", "campaign.db")
+    DB_PATH = os.path.join(PROJECT_ROOT, "database", "app.db")
     LLM_MODEL = "claude-sonnet-4-20250514"
+    LLM_TEMPERATURE = 0
 
 # Every other module imports from here:
 from config.settings import Settings
@@ -307,30 +329,36 @@ db_path = Settings.DB_PATH
 
 ---
 
-## How to Run Each Module Individually
+## Step 11: Python Version Check (Ubuntu)
+
+### Find installed Python versions
 
 ```bash
-# Generate mock data CSVs:
-python database/data/generate_mock_data.py
+# List all python binaries:
+ls -la /usr/bin/python*
 
-# Initialize the SQLite database:
-python database/campaign_db.py
+# Check specific versions:
+python3 --version
 
-# Build the RAG vector store:
-python rag/vector_store.py
-
-# Run the full web app:
-streamlit run app.py
+# See all installed python packages:
+dpkg -l | grep python3
 ```
 
-Each module can be tested independently because of the `if __name__ == "__main__"` pattern.
+### Install Python 3.12 on Ubuntu (if needed)
 
----
+```bash
+sudo add-apt-repository ppa:deadsnakes/ppa
+sudo apt update
+sudo apt install python3.12 python3.12-venv python3.12-dev
+```
 
-## Python Version Note
+### Create a virtual environment
 
-This project requires **Python 3.10 or higher** because it uses:
-- Union type syntax `str | None` (3.10+)
-- Modern f-string features
+```bash
+python3 -m venv venv            # Create
+source venv/bin/activate         # Activate (Linux/Mac)
+pip install -r requirements.txt  # Install dependencies
+deactivate                       # When done
+```
 
-See the main `README.md` for instructions on checking and installing the correct Python version on Ubuntu.
+**Why virtual environments?** They isolate your project's dependencies from the system Python. Different projects can use different library versions without conflicting.
