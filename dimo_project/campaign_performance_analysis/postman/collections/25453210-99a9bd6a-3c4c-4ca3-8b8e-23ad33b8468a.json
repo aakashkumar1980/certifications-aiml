@@ -1,8 +1,154 @@
 {
 	"info": {
 		"_postman_id": "25453210-99a9bd6a-3c4c-4ca3-8b8e-23ad33b8468a",
-		"name": "New Collection",
+		"name": "Campaign AI Assistant API",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
-	"item": []
+	"item": [
+		{
+			"name": "System",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": ["{{baseUrl}}"],
+							"path": ["health"]
+						}
+					}
+				},
+				{
+					"name": "Database Schema",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/schema",
+							"host": ["{{baseUrl}}"],
+							"path": ["schema"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "Campaigns",
+			"item": [
+				{
+					"name": "List All Campaigns",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/campaigns",
+							"host": ["{{baseUrl}}"],
+							"path": ["campaigns"]
+						}
+					}
+				},
+				{
+					"name": "Get Campaign by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/campaigns/CMP-001",
+							"host": ["{{baseUrl}}"],
+							"path": ["campaigns", "CMP-001"]
+						}
+					}
+				},
+				{
+					"name": "Get Campaign Summary",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/campaigns/CMP-001/summary",
+							"host": ["{{baseUrl}}"],
+							"path": ["campaigns", "CMP-001", "summary"]
+						}
+					}
+				}
+			]
+		},
+		{
+			"name": "AI Assistant",
+			"item": [
+				{
+					"name": "Ask Question",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"question\": \"Which campaign has the highest enrollment?\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ask",
+							"host": ["{{baseUrl}}"],
+							"path": ["ask"]
+						}
+					}
+				},
+				{
+					"name": "Ask SQL Query",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"question\": \"What is the total budget across all campaigns?\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ask/sql",
+							"host": ["{{baseUrl}}"],
+							"path": ["ask", "sql"]
+						}
+					}
+				},
+				{
+					"name": "Search Knowledge Base",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n\t\"query\": \"What is ROI?\",\n\t\"n_results\": 3\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/ask/search",
+							"host": ["{{baseUrl}}"],
+							"path": ["ask", "search"]
+						}
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	]
 }
