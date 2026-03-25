@@ -138,222 +138,351 @@ That's it. No Docker, no cloud services, no database servers. Everything runs lo
 
 ---
 
-## Two-Category Architecture
-
-The system is built around two distinct categories that mirror the standard RAG pipeline:
-
-### Category 1: RAG Pipeline — Knowledge Retrieval (`rag/` package)
-
-Handles finding relevant information from the domain-specific knowledge base. The LLM is NOT used for generation here — only sentence-transformers are used for embedding.
-
-**Steps 1-4** (one-time ingestion): Load Documents → Chunk → Embed → Store in ChromaDB
-**Steps 6-8** (every query): Embed Query → Semantic Search → Retrieve Closest Chunks
-
-### Category 2: LLM Intelligence — Content Generation (`llm/` package)
-
-Handles all reasoning, decision-making, and natural language generation. Claude serves as:
-- **SQL generator** — translates questions to database queries
-- **Response synthesizer** — combines data + context into business-friendly answers
-- **Fallback knowledge source** — provides general definitions from trained knowledge when RAG returns nothing relevant
-
-**Step 5** (entry): User Query received
-**Steps 9-11** (generation): Contextually Augmented Prompt → Fed to LLM → LLM Response
-
----
-
-## How It Works — The 11-Step RAG Pipeline
-
-Here is the complete end-to-end flow when a user asks a question, with entities grouped by category:
-
-```mermaid
-sequenceDiagram
-    actor User as User
-
-    box rgb(232, 245, 233) Category 1: RAG Pipeline (Knowledge Retrieval)
-        participant Docs as Documents<br/>(rag/documents.py)
-        participant Chunk as Chunker<br/>(rag/chunking.py)
-        participant Embed as Embedding Model<br/>(all-MiniLM-L6-v2)
-        participant VDB as Vector Database<br/>(ChromaDB)
-    end
-
-    box rgb(252, 228, 236) Category 2: LLM Intelligence (Content Generation)
-        participant Agent as AI Agent<br/>(llm/agent.py)
-        participant Tools as Agent Tools<br/>(llm/tools/)
-        participant LLM as Claude LLM<br/>(llm/provider.py)
-    end
-
-    participant DB as SQLite DB<br/>(database/)
-
-    Note over Docs, VDB: One-Time Ingestion (Steps 1-4)
-    Docs->>Docs: Step 1: Load campaign descriptions,<br/>performance summaries, business glossary
-    Docs->>Chunk: Step 2: Split documents into chunks<br/>(size=200, overlap=50)
-    Chunk->>Embed: Step 3: Encode chunks into<br/>embedding vectors (384-dim)
-    Embed->>VDB: Step 4: Store vectors + metadata<br/>in ChromaDB collection
-
-    Note over User, DB: Query Flow (Steps 5-11)
-    User->>Agent: Step 5: User Query<br/>"Which campaign has highest ROI?"
-    Agent->>LLM: Agent asks: "Which tool should I use?"
-    LLM-->>Agent: "Use sql_query_tool + rag_search_tool"
-
-    Note over Agent, VDB: RAG Path (Steps 6-8 via Category 1)
-    Agent->>Tools: Call rag_search_tool
-    Tools->>Embed: Step 6: Embed the user query<br/>using same model
-    Embed->>VDB: Step 7: Semantic Search<br/>(cosine similarity, top-3)
-    VDB-->>Tools: Step 8: Return closest chunks<br/>with distance scores
-
-    Note over Agent, DB: SQL Path (via Category 2)
-    Agent->>Tools: Call sql_query_tool
-    Tools->>LLM: Step 9: Augmented Prompt<br/>(schema + question → "Generate SQL")
-    LLM-->>Tools: Step 10-11: Generated SQL query
-    Tools->>DB: Execute SQL
-    DB-->>Tools: Raw result rows (JSON)
-
-    Note over Agent, LLM: Final Synthesis (Steps 9-11)
-    Tools-->>Agent: DB results + RAG chunks
-    Agent->>LLM: Step 9: Contextually Augmented Prompt<br/>(data + context + question)
-    LLM-->>Agent: Step 10→11: Fed to LLM → LLM Response<br/>(business-friendly answer)
-    Agent-->>User: "CMP-003 achieved the highest ROI at 210%..."
-```
-
-### The 11 Steps Explained
-
-| Step | Name | Category | Module | What Happens |
-|------|------|----------|--------|--------------|
-| 1 | Loading Documents | RAG | `rag/documents.py` | Campaign descriptions, summaries, glossary gathered |
-| 2 | Chunking | RAG | `rag/chunking.py` | Documents split into ~200-char overlapping chunks |
-| 3 | Embedding Chunks | RAG | `rag/vector_store.py` | Chunks encoded to 384-dim vectors via sentence-transformers |
-| 4 | Storing in Vector DB | RAG | `rag/vector_store.py` | Vectors + metadata stored in ChromaDB |
-| 5 | User Query | LLM | `llm/agent.py` | Question received, agent decides tool(s) to call |
-| 6 | Embedding Query | RAG | `rag/vector_store.py` | User query encoded using same embedding model |
-| 7 | Semantic Search | RAG | `rag/vector_store.py` | Cosine similarity search against all stored vectors |
-| 8 | Retrieve Closest Chunks | RAG | `rag/vector_store.py` | Top-N chunks returned with distance scores |
-| 9 | Augmented Prompt | LLM | `llm/tools/*.py` | DB results + RAG chunks + question assembled into prompt |
-| 10 | Fed to LLM | LLM | `llm/tools/*.py` | Augmented prompt sent to Claude for synthesis |
-| 11 | LLM Response | LLM | `llm/agent.py` | Claude generates business-friendly natural language answer |
-
----
-
-## Technical Solution Explained Simply
-
-This project combines three AI techniques. Here is what each one does, in the simplest terms possible:
-
-### 1. LLM (Large Language Model) = "The Brain"
-
-Claude is an AI that understands human language. When you ask "Which campaign did best?", Claude understands what "best" means in a business context, writes the correct SQL query, and explains the results clearly. It is the intelligence behind the whole system. When the knowledge base has no relevant answer, Claude can fall back on its own trained knowledge (e.g., providing a general definition of "enrollment").
-
-### 2. RAG (Retrieval-Augmented Generation) = "The Reference Book"
-
-Claude is smart, but it does not know YOUR specific campaign data. RAG solves this by giving Claude a "reference book" — a searchable collection of campaign descriptions, performance summaries, and business term definitions. Documents are first chunked into smaller pieces, then embedded as vectors and stored in ChromaDB. Before answering, the system looks up the most relevant chunks and hands them to Claude. This way, Claude's answers are grounded in your actual business data, not just general knowledge.
-
-### 3. AI Agent = "The Manager"
-
-The agent is the decision-maker. It has three tools (SQL queries, knowledge search, report generator) and decides which one to use based on your question. For a data question it picks SQL; for a definition question it picks the knowledge search; for a report request it combines both. It is like a manager delegating work to the right team member.
-
-### How they work together
-
-```mermaid
-flowchart LR
-    Q["Your Question"] --> Agent{"AI Agent<br/>(decides what to do)"}
-
-    subgraph cat1["Category 1: RAG Pipeline"]
-        RAG["RAG Tool<br/>Searches knowledge base"]
-    end
-
-    subgraph cat2["Category 2: LLM Intelligence"]
-        SQL["SQL Tool<br/>Queries the database"]
-        Report["Summary Tool<br/>Combines DB + RAG + LLM"]
-        Combine["Agent synthesizes results"]
-    end
-
-    Agent -->|Data question| SQL
-    Agent -->|Context question| RAG
-    Agent -->|Report request| Report
-    SQL --> Combine
-    RAG --> Combine
-    Report --> Combine
-    Combine --> Answer["Friendly answer<br/>back to you"]
-
-    style Q fill:#e1f5fe
-    style Agent fill:#fff3e0
-    style cat1 fill:#e8f5e9
-    style cat2 fill:#fce4ec
-    style SQL fill:#fce4ec
-    style RAG fill:#e8f5e9
-    style Report fill:#fce4ec
-    style Combine fill:#fff3e0
-    style Answer fill:#e1f5fe
-```
-
----
-
-## Architecture
+## Solution Architecture
 
 ```mermaid
 graph TB
-    subgraph API["FastAPI REST API (app.py)"]
-        Ask["POST /ask"]
-        AskSQL["POST /ask/sql"]
-        AskSearch["POST /ask/search"]
-        Campaigns["GET /campaigns"]
-        Summary["GET /campaigns/:id/summary"]
-        Health["GET /health"]
+    subgraph API["FastAPI REST API"]
+        Endpoints["POST /ask  •  POST /ask/sql  •  POST /ask/search<br/>GET /campaigns  •  GET /campaigns/:id/summary  •  GET /health"]
     end
 
-    subgraph cat2["Category 2: LLM Intelligence (llm/)"]
-        direction TB
-        Provider["LLM Provider<br/>(llm/provider.py)"]
-        AgentMod["Campaign Agent<br/>(llm/agent.py)"]
-        T1["sql_query_tool<br/>(llm/tools/sql_query.py)"]
-        T2["rag_search_tool<br/>(llm/tools/rag_search.py)"]
-        T3["performance_summary_tool<br/>(llm/tools/performance_summary.py)"]
-        Claude["Claude claude-sonnet-4-20250514"]
+    subgraph Agent["AI Agent (llm/agent.py)"]
+        direction LR
+        T1["sql_query_tool"]
+        T2["rag_search_tool"]
+        T3["performance_summary_tool"]
     end
 
-    subgraph cat1["Category 1: RAG Pipeline (rag/)"]
-        direction TB
-        DocMod["Document Sources<br/>(rag/documents.py)"]
-        ChunkMod["Text Chunker<br/>(rag/chunking.py)"]
-        VecStore["Vector Store<br/>(rag/vector_store.py)"]
-        Chroma["ChromaDB<br/>(vector embeddings)"]
+    subgraph RAG["RAG Pipeline (rag/)"]
+        direction LR
+        Docs["Documents"] --> Chunker["Chunker"] --> VecStore["ChromaDB"]
     end
 
-    subgraph DataLayer["Data Infrastructure"]
-        SQLite["SQLite DB<br/>(campaign.db)"]
-        Config["Config<br/>(config/settings.py)"]
+    subgraph Infra["Data Infrastructure"]
+        direction LR
+        SQLite["SQLite DB"]
+        Config["Settings"]
     end
 
-    subgraph DataGen["Data Generation"]
-        Mock["MockDataGenerator<br/>(Faker)"]
-        CSV["CSV Files"]
-    end
+    Claude["Claude LLM"]
 
-    Ask --> AgentMod
-    Summary --> AgentMod
-    AskSQL --> T1
-    AskSearch --> T2
-    Campaigns --> SQLite
-    AgentMod <--> Claude
-    AgentMod --> T1
-    AgentMod --> T2
-    AgentMod --> T3
-    Provider --> Claude
+    API --> Agent
+    Agent <--> Claude
     T1 --> SQLite
-    T1 --> Provider
     T2 --> VecStore
     T3 --> SQLite
     T3 --> VecStore
-    T3 --> Provider
-    DocMod --> ChunkMod
-    ChunkMod --> VecStore
-    VecStore --> Chroma
-    Mock --> CSV
-    CSV --> SQLite
 
     style API fill:#e3f2fd
-    style cat2 fill:#fce4ec
-    style cat1 fill:#e8f5e9
-    style DataLayer fill:#f5f5f5
-    style DataGen fill:#f3e5f5
+    style Agent fill:#fce4ec
+    style RAG fill:#e8f5e9
+    style Infra fill:#f5f5f5
+```
+
+---
+
+## How It Works — Data Flows with Examples
+
+### Part 1: One-Time Ingestion (Startup)
+
+At startup, domain knowledge is converted into searchable vectors. Here is exactly what happens to real data:
+
+#### Step 1 — Load Documents
+
+Three types of documents are loaded from `rag/documents.py`:
+
+```
+CAMPAIGN DESCRIPTION (CMP-003):
+"Spring Dining Deal: A dining rewards campaign targeting student cardholders.
+ Offers 10% cashback at partner restaurants including Olive Garden and Starbucks.
+ Designed to increase engagement among younger customers. Budget: $100,000."
+
+PERFORMANCE SUMMARY (CMP-001):
+"CMP-001 Performance Summary: The Summer Cashback Bonanza achieved a 12% enrollment
+ rate with 142 enrollments from premium customers. Redemption rate was 68%, driven
+ primarily by grocery purchases at Whole Foods and Costco. ROI came in at 185%..."
+
+BUSINESS GLOSSARY:
+"ROI (Return on Investment): Measures campaign profitability.
+ Calculated as ((revenue - cost) / cost) * 100. For credit card campaigns,
+ ROI above 100% is considered successful. Top campaigns achieve 150-250% ROI."
+```
+
+#### Step 2 — Chunk Documents
+
+Each document is split into ~200-character overlapping pieces (`chunk_size=200`, `chunk_overlap=50`):
+
+```
+Original document (CMP-003 description, 230 chars):
+┌──────────────────────────────────────────────────────────────────────────────┐
+│ Spring Dining Deal: A dining rewards campaign targeting student cardholders.│
+│ Offers 10% cashback at partner restaurants including Olive Garden and       │
+│ Starbucks. Designed to increase engagement among younger customers.         │
+│ Budget: $100,000.                                                           │
+└──────────────────────────────────────────────────────────────────────────────┘
+
+After chunking:
+┌─ Chunk 0 (chars 0-200) ─────────────────────────────────────────────────────┐
+│ Spring Dining Deal: A dining rewards campaign targeting student             │
+│ cardholders. Offers 10% cashback at partner restaurants including Olive     │
+│ Garden and Starbucks.                                                       │
+└─────────────────────────────────────────────────────────────────────────────┘
+┌─ Chunk 1 (chars 150-230) — overlaps with chunk 0 ──────────────────────────┐
+│ including Olive Garden and Starbucks. Designed to increase engagement       │
+│ among younger customers. Budget: $100,000.                                  │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### Steps 3-4 — Embed and Store
+
+Each chunk is converted to a 384-dimensional vector by the `all-MiniLM-L6-v2` model and stored in ChromaDB:
+
+```
+Chunk: "Spring Dining Deal: A dining rewards campaign targeting student
+        cardholders. Offers 10% cashback at partner restaurants..."
+
+        ↓ Embedding Model (all-MiniLM-L6-v2)
+
+Vector: [0.042, -0.118, 0.231, 0.067, ..., -0.089]   (384 numbers)
+
+        ↓ Stored in ChromaDB with metadata
+
+ID:       "desc_CMP-003_chunk0"
+Vector:   [0.042, -0.118, 0.231, ...]
+Metadata: {type: "campaign_description", campaign_id: "CMP-003",
+           chunk_index: 0, total_chunks: 2}
+```
+
+Total: 17 documents → ~40 chunks → 40 vectors stored in ChromaDB.
+
+---
+
+### Part 2: Runtime Query — Case-by-Case Data Flows
+
+At runtime, the AI Agent receives the user's question and decides which tool(s) to call. Here are the different cases:
+
+---
+
+#### Case 1: Data Question → `sql_query_tool`
+
+> **"Which campaign has the highest enrollment?"**
+
+The agent recognizes this needs database data and calls `sql_query_tool`.
+
+```
+USER QUESTION
+│  "Which campaign has the highest enrollment?"
+│
+▼
+AGENT DECISION
+│  "This is a data question → use sql_query_tool"
+│
+▼
+SQL QUERY TOOL
+│  ┌─ Step 9: Augmented Prompt ──────────────────────────────────────────┐
+│  │ "You are a SQL expert. Given this database schema:                  │
+│  │  CREATE TABLE campaigns (campaign_id, campaign_name, ...)           │
+│  │  CREATE TABLE enrollments (enrollment_id, campaign_id, ...)         │
+│  │                                                                     │
+│  │  Generate a SQLite SELECT query to answer:                          │
+│  │  'Which campaign has the highest enrollment?'"                      │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Steps 10-11: Claude generates SQL ─────────────────────────────────┐
+│  │ SELECT c.campaign_name, COUNT(e.enrollment_id) AS total             │
+│  │ FROM campaigns c JOIN enrollments e ON c.campaign_id = e.campaign_id│
+│  │ GROUP BY c.campaign_name ORDER BY total DESC LIMIT 5                │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ SQL Execution Result ──────────────────────────────────────────────┐
+│  │ [{"campaign_name": "Spring Dining Deal", "total": 180},            │
+│  │  {"campaign_name": "Launch Cashback Offer", "total": 163},         │
+│  │  {"campaign_name": "Summer Cashback Bonanza", "total": 142}]       │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+▼
+AGENT SYNTHESIZES
+│  Claude reads the SQL results and writes a friendly answer
+│
+▼
+FINAL ANSWER
+   "The Spring Dining Deal (CMP-003) has the highest enrollment with
+    180 sign-ups, followed by Launch Cashback Offer (CMP-005) with
+    163 and Summer Cashback Bonanza (CMP-001) with 142."
+```
+
+---
+
+#### Case 2: Context/Definition Question → `rag_search_tool`
+
+> **"What does redemption rate mean?"**
+
+The agent recognizes this is a definition question and calls `rag_search_tool`.
+
+```
+USER QUESTION
+│  "What does redemption rate mean?"
+│
+▼
+AGENT DECISION
+│  "This is a definition question → use rag_search_tool"
+│
+▼
+RAG SEARCH TOOL
+│  ┌─ Step 6: Embed the Query ──────────────────────────────────────────┐
+│  │ "What does redemption rate mean?"                                   │
+│  │     ↓ same all-MiniLM-L6-v2 model                                  │
+│  │ Query Vector: [-0.033, 0.215, 0.087, ..., 0.142]  (384 dims)       │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 7: Semantic Search (cosine similarity) ──────────────────────┐
+│  │ Compare query vector against all 40 stored vectors...               │
+│  │                                                                     │
+│  │ Glossary "Redemption Rate" chunk   → distance: 0.4212  ✓ closest   │
+│  │ CMP-001 summary "Redemption 68%"   → distance: 0.8934  ✓ 2nd      │
+│  │ CMP-003 summary "Redemption 74%"   → distance: 0.9187  ✓ 3rd      │
+│  │ Glossary "Enrollment Rate" chunk   → distance: 1.1042  ✗ too far   │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 8: Retrieved Chunks (top 3) ─────────────────────────────────┐
+│  │ [Source 1] Type: business_glossary                                  │
+│  │ "Redemption Rate: The percentage of enrolled customers who          │
+│  │  actually redeem their reward. Calculated as                        │
+│  │  (redemptions / enrollments) * 100. Industry benchmark is 40-70%." │
+│  │                                                                     │
+│  │ [Source 2] Type: performance_summary | Campaign: CMP-001            │
+│  │ "Redemption rate was 68%, driven primarily by grocery purchases..." │
+│  │                                                                     │
+│  │ [Source 3] Type: performance_summary | Campaign: CMP-003            │
+│  │ "Redemption rate was 74% — highest across all campaigns..."         │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+▼
+AGENT SYNTHESIZES
+│  Claude combines the glossary definition + real examples
+│
+▼
+FINAL ANSWER
+   "Redemption rate is the percentage of enrolled customers who actually
+    redeem their reward, calculated as (redemptions / enrollments) × 100.
+    The industry benchmark is 40-70%. In our campaigns, CMP-003 leads
+    at 74% and CMP-001 is at 68%."
+```
+
+---
+
+#### Case 3: Report Request → `performance_summary_tool`
+
+> **"Give me a performance summary for CMP-003"**
+
+The agent calls `performance_summary_tool`, which internally uses BOTH SQL and RAG.
+
+```
+USER QUESTION
+│  "Give me a performance summary for CMP-003"
+│
+▼
+AGENT DECISION
+│  "This is a report request → use performance_summary_tool"
+│
+▼
+PERFORMANCE SUMMARY TOOL (hybrid — uses SQL + RAG + LLM internally)
+│
+│  ┌─ SQL Queries ───────────────────────────────────────────────────────┐
+│  │ Query 1: SELECT cp.*, c.campaign_name, c.campaign_type ...          │
+│  │          FROM campaign_performance cp JOIN campaigns c ...           │
+│  │          WHERE cp.campaign_id = 'CMP-003' ORDER BY cp.month         │
+│  │ Result:  [{month: "2024-03", enrollments: 45, redemptions: 33, ...},│
+│  │           {month: "2024-04", enrollments: 72, redemptions: 55, ...},│
+│  │           {month: "2024-05", enrollments: 63, redemptions: 48, ...}]│
+│  │                                                                     │
+│  │ Query 2: SELECT COUNT(*) as total_enrollments FROM enrollments ...   │
+│  │ Result:  [{total_enrollments: 180}]                                  │
+│  │                                                                     │
+│  │ Query 3: SELECT COUNT(*), SUM(redemption_amount) FROM redemptions...│
+│  │ Result:  [{total_redemptions: 136, total_amount: 8420.50}]           │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ RAG Search (Steps 6-8) ───────────────────────────────────────────┐
+│  │ Query: "performance summary for CMP-003"                            │
+│  │ Retrieved:                                                          │
+│  │   "CMP-003 Performance Summary: Spring Dining Deal was highly       │
+│  │    effective with students, achieving 180 enrollments through        │
+│  │    mobile channel (72% of total). Redemption rate was 74%..."        │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 9: Augmented Prompt (DB data + RAG context + instruction) ───┐
+│  │ "Generate a concise business-friendly performance summary for       │
+│  │  campaign CMP-003.                                                  │
+│  │                                                                     │
+│  │  Data: {performance_metrics: [...], enrollment_totals: [...],        │
+│  │         redemption_totals: [...]}                                    │
+│  │                                                                     │
+│  │  Additional Context: CMP-003 Performance Summary: Spring Dining...  │
+│  │                                                                     │
+│  │  Format: 3-4 paragraphs covering enrollment trends, redemption      │
+│  │  patterns, ROI analysis, and a recommendation."                     │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Steps 10-11: Claude generates the narrative ──────────────────────┐
+│  │ (Claude reads ALL the data + context and writes a report)           │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+▼
+FINAL ANSWER
+   "The Spring Dining Deal (CMP-003) demonstrated strong performance,
+    particularly among student cardholders. With 180 total enrollments
+    and a 74% redemption rate — the highest across all campaigns —
+    the campaign exceeded expectations. Mobile was the dominant channel
+    at 72% of enrollments. Starbucks drove 45% of all redemptions.
+    On a modest $100,000 budget, the campaign achieved an impressive
+    210% ROI. Recommendation: expand dining partnerships and increase
+    budget allocation for the student segment."
+```
+
+---
+
+#### Case 4: LLM Fallback — Question Not in Knowledge Base
+
+> **"What is enrollment and what are the different types of enrollment?"**
+
+The knowledge base has "Enrollment Rate" (a metric) but NOT a general definition of enrollment or its types.
+
+```
+USER QUESTION
+│  "What is enrollment and what are the different types of enrollment?"
+│
+▼
+AGENT DECISION
+│  "This seems like a definition question → use rag_search_tool"
+│
+▼
+RAG SEARCH TOOL
+│  ┌─ Steps 6-8: Semantic Search ───────────────────────────────────────┐
+│  │ Query: "What is enrollment and what are the different types"         │
+│  │                                                                     │
+│  │ Retrieved (partial matches — NOT exact answers):                    │
+│  │   [Source 1] Glossary: "Enrollment Rate: The percentage of users    │
+│  │    who enroll in a campaign after seeing it..."  (distance: 0.82)   │
+│  │   [Source 2] CMP-005 summary: "...onboarded 163 new customers..."  │
+│  │   [Source 3] CMP-003 summary: "...achieving 180 enrollments..."    │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+▼
+AGENT SYNTHESIZES (Claude fills in the gaps from trained knowledge)
+│  - RAG provided: enrollment rate definition + campaign enrollment data
+│  - Claude adds: general definition of enrollment + types (open, closed,
+│    rolling, etc.) from its own trained knowledge
+│
+▼
+FINAL ANSWER
+   "Enrollment refers to the process of signing up or registering for a
+    program or campaign. Types include:
+    - Open enrollment: anyone can sign up during a defined window
+    - Targeted enrollment: only pre-selected customers are eligible
+    - Auto-enrollment: customers are enrolled automatically
+    In our campaign data, enrollment rate is tracked as the percentage
+    of users who enroll after seeing a campaign (typically 5-15%)."
 ```
 
 ---
