@@ -142,6 +142,222 @@
 					}
 				}
 			]
+		},
+		{
+			"name": "Demo Scenarios",
+			"description": "Three realistic demo scenarios that showcase the RAG pipeline's two categories:\n\n1. **LLM Fallback** — Generic question NOT in vector DB. Claude uses its trained knowledge.\n2. **RAG + SQL Combo** — Generic definition (RAG/LLM) combined with a data query (SQL tool).\n3. **Performance Report** — Full hybrid: SQL data + RAG context + LLM synthesis.",
+			"item": [
+				{
+					"name": "Scenario 1: LLM Fallback — Generic Definition",
+					"description": "Tests Category 2 (LLM Intelligence) fallback behavior.\n\nThe question asks for a general definition of 'enrollment' and its types.\nThis is NOT stored in the vector database — the business glossary only has\n'Enrollment Rate' (a metric), not a general definition of enrollment itself.\n\nExpected behavior:\n- Agent calls rag_search_tool → finds partial match (Enrollment Rate glossary)\n- RAG chunks provide some context but not a full definition\n- Claude supplements with its own trained knowledge about enrollment types\n  (open enrollment, automatic enrollment, opt-in, etc.)\n- Final answer blends RAG context + LLM's general knowledge\n\nThis demonstrates that Claude can fall back on its trained model when the\nvector database doesn't have an exact match — a key advantage of Category 2.",
+					"item": [
+						{
+							"name": "1a. Ask: General definition of enrollment (via /ask — agent decides)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"question\": \"What is the definition of enrollment? What are the different types of enrollment in credit card campaigns?\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask"]
+								}
+							}
+						},
+						{
+							"name": "1b. Search: Check what RAG actually has about enrollment (raw search)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"query\": \"definition of enrollment types\",\n\t\"n_results\": 3\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask/search",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask", "search"]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Scenario 2: RAG + SQL — Definition + Data Query",
+					"description": "Tests both categories working together on a compound question.\n\nPart A asks for a definition (RAG search + LLM fallback).\nPart B asks which campaign had the maximum enrollments (SQL query).\nPart C asks both in a single question — the agent must call BOTH tools.\n\nExpected behavior for Part C:\n- Agent recognizes this is a compound question\n- Calls rag_search_tool for the 'enrollment' definition (Steps 6-8)\n- Calls sql_query_tool to find max enrollments (Steps 9-11)\n- Combines both results into a single coherent answer\n\nThis demonstrates the agent's ability to orchestrate multiple tools\nand merge Category 1 (retrieval) with Category 2 (generation).",
+					"item": [
+						{
+							"name": "2a. Ask: What is enrollment? (definition via agent)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"question\": \"What is the definition of enrollment rate and how is it calculated?\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask"]
+								}
+							}
+						},
+						{
+							"name": "2b. Ask SQL: Which campaign had maximum enrollments? (data query)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"question\": \"Which campaign had the maximum number of enrollments? Show the campaign name and total count.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask/sql",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask", "sql"]
+								}
+							}
+						},
+						{
+							"name": "2c. Ask: Combined — definition + data in one question (agent uses both tools)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"question\": \"What is enrollment rate and how is it calculated? Also, which campaign had the maximum enrollments and what was the count?\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask"]
+								}
+							}
+						}
+					]
+				},
+				{
+					"name": "Scenario 3: Campaign Performance Report",
+					"description": "Tests the full hybrid flow using the performance_summary_tool.\n\nCMP-003 (Spring Dining Deal) is chosen because it demonstrates the most\ninteresting story: highest redemption rate (74%), student-focused targeting,\nsmallest budget ($100K) yet highest ROI (210%), mobile-dominant channel.\n\nExpected behavior:\n- Agent calls performance_summary_tool with campaign_id='CMP-003'\n- Tool executes 3 SQL queries against SQLite:\n  1. Monthly performance metrics joined with campaign info\n  2. Aggregate enrollment count\n  3. Aggregate redemption count + total amount\n- Tool calls rag_search_tool for qualitative context (Steps 6-8)\n- All data assembled into augmented prompt (Step 9)\n- Sent to Claude for synthesis (Step 10)\n- Claude returns a 3-4 paragraph business report (Step 11)\n\nThis is the most complex flow — it exercises both categories fully:\n- Category 1: RAG retrieval of campaign description + performance summary\n- Category 2: SQL execution, prompt assembly, LLM narrative generation",
+					"item": [
+						{
+							"name": "3a. Get: Campaign details for CMP-003 (raw data)",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/campaigns/CMP-003",
+									"host": ["{{baseUrl}}"],
+									"path": ["campaigns", "CMP-003"]
+								}
+							}
+						},
+						{
+							"name": "3b. Search: RAG context for CMP-003 (what the knowledge base knows)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"query\": \"Spring Dining Deal CMP-003 performance\",\n\t\"n_results\": 5\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask/search",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask", "search"]
+								}
+							}
+						},
+						{
+							"name": "3c. Ask SQL: Monthly performance trend for CMP-003 (raw SQL data)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"question\": \"Show the monthly enrollment count, redemption count, and ROI for campaign CMP-003 ordered by month\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask/sql",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask", "sql"]
+								}
+							}
+						},
+						{
+							"name": "3d. Get Summary: Full AI-generated performance report for CMP-003",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/campaigns/CMP-003/summary",
+									"host": ["{{baseUrl}}"],
+									"path": ["campaigns", "CMP-003", "summary"]
+								}
+							}
+						},
+						{
+							"name": "3e. Ask: Compare CMP-003 vs CMP-004 — best ROI on budget (complex query)",
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n\t\"question\": \"Compare the Spring Dining Deal (CMP-003) and Year-End Retail Special (CMP-004). Which one delivered better ROI relative to its budget? Include the actual numbers.\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/ask",
+									"host": ["{{baseUrl}}"],
+									"path": ["ask"]
+								}
+							}
+						}
+					]
+				}
+			]
 		}
 	],
 	"variable": [
