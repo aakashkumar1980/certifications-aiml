@@ -6,37 +6,66 @@ A step-by-step guide to the Python programming concepts, patterns, and libraries
 
 ## Step 1: Project Structure — Why Organize Code This Way?
 
-A well-organized Python project separates code by responsibility. Here is a typical layout:
+A well-organized Python project separates code by responsibility. This project uses a **two-category** architecture that mirrors the RAG pipeline:
 
 ```
 my_project/
-├── config/                 # Settings and constants
+├── config/                     # Settings and constants
 │   ├── __init__.py
 │   └── settings.py
-├── database/               # Everything data-related
+├── database/                   # Data infrastructure
 │   ├── __init__.py
-│   ├── db_manager.py       # Database operations
-│   └── data/               # Data generation / seed files
+│   ├── campaign_db.py          # Database operations
+│   └── data/
 │       ├── __init__.py
-│       └── generate_data.py
-├── rag/                    # AI knowledge store
-│   ├── __init__.py
-│   └── vector_store.py
-├── agent/                  # AI agent logic
-│   ├── __init__.py
-│   └── agent.py
-├── app.py                  # Application entry point
-├── requirements.txt        # Python package dependencies
-└── .env.example            # Template for secrets
+│       └── generate_mock_data.py
+│
+├── rag/                        # CATEGORY 1: RAG Pipeline (Knowledge Retrieval)
+│   ├── __init__.py             #   Re-exports public API
+│   ├── documents.py            #   Step 1: Document sources
+│   ├── chunking.py             #   Step 2: Text splitting logic
+│   └── vector_store.py         #   Steps 3-4, 6-8: Embed, store, search
+│
+├── llm/                        # CATEGORY 2: LLM Intelligence (Content Generation)
+│   ├── __init__.py             #   Re-exports CampaignAgent
+│   ├── provider.py             #   Claude LLM initialization
+│   ├── tools/                  #   One file per tool
+│   │   ├── __init__.py         #   ALL_TOOLS list
+│   │   ├── sql_query.py        #   Steps 9-11: NL → SQL → execute
+│   │   ├── rag_search.py       #   Bridge to Category 1
+│   │   └── performance_summary.py  # Steps 9-11: Hybrid report
+│   └── agent.py                #   Steps 5, 9-11: Agent orchestrator
+│
+├── app.py                      # Application entry point (FastAPI)
+├── requirements.txt            # Python package dependencies
+└── .env.example                # Template for secrets
 ```
+
+### Why two packages (`rag/` and `llm/`)?
+
+Each package maps to a distinct responsibility in the RAG architecture:
+
+- **`rag/`** handles **finding information** — loading documents, chunking, embedding, vector storage, semantic search. The LLM is NOT involved here.
+- **`llm/`** handles **thinking and generating** — agent reasoning, SQL generation, response synthesis, tool orchestration. This is where Claude lives.
+
+This separation means you could swap ChromaDB for Pinecone (only touching `rag/`) or swap Claude for GPT (only touching `llm/`) without cross-contamination.
 
 ### What is `__init__.py`?
 
 Every folder with an `__init__.py` file becomes a **Python package**. This allows you to do imports like:
 
 ```python
-from database.db_manager import execute_query
+from database.campaign_db import execute_query
 from rag.vector_store import search_similar
+from llm.agent import CampaignAgent
+```
+
+The `__init__.py` can also re-export symbols for convenience:
+
+```python
+# rag/__init__.py
+from rag.vector_store import build_knowledge_base, search_similar
+# Now other files can do: from rag import search_similar
 ```
 
 Without `__init__.py`, Python would not recognize these folders as importable packages.

@@ -58,7 +58,7 @@ ANTHROPIC_API_KEY=sk-ant-api03-YOUR-ACTUAL-KEY-HERE
 
 Save and close the file. The application reads this file automatically at startup.
 
-> **How it works internally:** The `config/settings.py` module uses `python-dotenv` to load `.env` into environment variables. The agent module then reads `Settings.ANTHROPIC_API_KEY` when it creates the Claude LLM connection. If the key is missing, you will get a clear error message telling you to set it.
+> **How it works internally:** The `config/settings.py` module uses `python-dotenv` to load `.env` into environment variables. The LLM provider module then reads `Settings.ANTHROPIC_API_KEY` when it creates the Claude connection. If the key is missing, you will get a clear error message telling you to set it.
 
 ### 4. Disk Space
 
@@ -138,43 +138,98 @@ That's it. No Docker, no cloud services, no database servers. Everything runs lo
 
 ---
 
-## How It Works — Sequence Diagram
+## Two-Category Architecture
 
-Here is what happens end-to-end when you send a request to the API:
+The system is built around two distinct categories that mirror the standard RAG pipeline:
+
+### Category 1: RAG Pipeline — Knowledge Retrieval (`rag/` package)
+
+Handles finding relevant information from the domain-specific knowledge base. The LLM is NOT used for generation here — only sentence-transformers are used for embedding.
+
+**Steps 1-4** (one-time ingestion): Load Documents → Chunk → Embed → Store in ChromaDB
+**Steps 6-8** (every query): Embed Query → Semantic Search → Retrieve Closest Chunks
+
+### Category 2: LLM Intelligence — Content Generation (`llm/` package)
+
+Handles all reasoning, decision-making, and natural language generation. Claude serves as:
+- **SQL generator** — translates questions to database queries
+- **Response synthesizer** — combines data + context into business-friendly answers
+- **Fallback knowledge source** — provides general definitions from trained knowledge when RAG returns nothing relevant
+
+**Step 5** (entry): User Query received
+**Steps 9-11** (generation): Contextually Augmented Prompt → Fed to LLM → LLM Response
+
+---
+
+## How It Works — The 11-Step RAG Pipeline
+
+Here is the complete end-to-end flow when a user asks a question, with entities grouped by category:
 
 ```mermaid
 sequenceDiagram
-    actor Client as Client (curl / Postman / App)
-    participant API as FastAPI Server
-    participant Agent as LangChain Agent
-    participant LLM as Claude LLM
-    participant Tools as Agent Tools
-    participant DB as SQLite / ChromaDB
+    actor User as User
 
-    Client->>API: 1. POST /ask {"question": "..."}
-    API->>Agent: 2. Forward question
-    Agent->>LLM: 3. "Which tool should I use?"
-    LLM-->>Agent: 4. "Use sql_query_tool"
-    Agent->>Tools: 5. Call sql_query_tool
-    Tools->>LLM: 6. "Generate SQL for this question"
-    LLM-->>Tools: 7. Returns SQL query
-    Tools->>DB: 8. Execute SQL query
-    DB-->>Tools: 9. Return result rows
-    Tools-->>Agent: 10. Formatted results
-    Agent->>LLM: 11. "Summarize these results"
-    LLM-->>Agent: 12. Plain English answer
-    Agent-->>API: 13. Return structured response
-    API-->>Client: 14. JSON response
+    box rgb(232, 245, 233) Category 1: RAG Pipeline (Knowledge Retrieval)
+        participant Docs as Documents<br/>(rag/documents.py)
+        participant Chunk as Chunker<br/>(rag/chunking.py)
+        participant Embed as Embedding Model<br/>(all-MiniLM-L6-v2)
+        participant VDB as Vector Database<br/>(ChromaDB)
+    end
+
+    box rgb(252, 228, 236) Category 2: LLM Intelligence (Content Generation)
+        participant Agent as AI Agent<br/>(llm/agent.py)
+        participant Tools as Agent Tools<br/>(llm/tools/)
+        participant LLM as Claude LLM<br/>(llm/provider.py)
+    end
+
+    participant DB as SQLite DB<br/>(database/)
+
+    Note over Docs, VDB: One-Time Ingestion (Steps 1-4)
+    Docs->>Docs: Step 1: Load campaign descriptions,<br/>performance summaries, business glossary
+    Docs->>Chunk: Step 2: Split documents into chunks<br/>(size=200, overlap=50)
+    Chunk->>Embed: Step 3: Encode chunks into<br/>embedding vectors (384-dim)
+    Embed->>VDB: Step 4: Store vectors + metadata<br/>in ChromaDB collection
+
+    Note over User, DB: Query Flow (Steps 5-11)
+    User->>Agent: Step 5: User Query<br/>"Which campaign has highest ROI?"
+    Agent->>LLM: Agent asks: "Which tool should I use?"
+    LLM-->>Agent: "Use sql_query_tool + rag_search_tool"
+
+    Note over Agent, VDB: RAG Path (Steps 6-8 via Category 1)
+    Agent->>Tools: Call rag_search_tool
+    Tools->>Embed: Step 6: Embed the user query<br/>using same model
+    Embed->>VDB: Step 7: Semantic Search<br/>(cosine similarity, top-3)
+    VDB-->>Tools: Step 8: Return closest chunks<br/>with distance scores
+
+    Note over Agent, DB: SQL Path (via Category 2)
+    Agent->>Tools: Call sql_query_tool
+    Tools->>LLM: Step 9: Augmented Prompt<br/>(schema + question → "Generate SQL")
+    LLM-->>Tools: Step 10-11: Generated SQL query
+    Tools->>DB: Execute SQL
+    DB-->>Tools: Raw result rows (JSON)
+
+    Note over Agent, LLM: Final Synthesis (Steps 9-11)
+    Tools-->>Agent: DB results + RAG chunks
+    Agent->>LLM: Step 9: Contextually Augmented Prompt<br/>(data + context + question)
+    LLM-->>Agent: Step 10→11: Fed to LLM → LLM Response<br/>(business-friendly answer)
+    Agent-->>User: "CMP-003 achieved the highest ROI at 210%..."
 ```
 
-**In plain English:**
-1. A client sends a POST request with a question to `/ask`
-2. The API forwards the question to the AI agent
-3. The agent asks Claude (the LLM) which tool to use
-4. Claude decides: "This is a data question, use the SQL tool"
-5. The SQL tool asks Claude to generate the correct SQL, then runs it against the database
-6. The agent sends the results back to Claude to write a friendly answer
-7. The API returns the answer as JSON
+### The 11 Steps Explained
+
+| Step | Name | Category | Module | What Happens |
+|------|------|----------|--------|--------------|
+| 1 | Loading Documents | RAG | `rag/documents.py` | Campaign descriptions, summaries, glossary gathered |
+| 2 | Chunking | RAG | `rag/chunking.py` | Documents split into ~200-char overlapping chunks |
+| 3 | Embedding Chunks | RAG | `rag/vector_store.py` | Chunks encoded to 384-dim vectors via sentence-transformers |
+| 4 | Storing in Vector DB | RAG | `rag/vector_store.py` | Vectors + metadata stored in ChromaDB |
+| 5 | User Query | LLM | `llm/agent.py` | Question received, agent decides tool(s) to call |
+| 6 | Embedding Query | RAG | `rag/vector_store.py` | User query encoded using same embedding model |
+| 7 | Semantic Search | RAG | `rag/vector_store.py` | Cosine similarity search against all stored vectors |
+| 8 | Retrieve Closest Chunks | RAG | `rag/vector_store.py` | Top-N chunks returned with distance scores |
+| 9 | Augmented Prompt | LLM | `llm/tools/*.py` | DB results + RAG chunks + question assembled into prompt |
+| 10 | Fed to LLM | LLM | `llm/tools/*.py` | Augmented prompt sent to Claude for synthesis |
+| 11 | LLM Response | LLM | `llm/agent.py` | Claude generates business-friendly natural language answer |
 
 ---
 
@@ -184,11 +239,11 @@ This project combines three AI techniques. Here is what each one does, in the si
 
 ### 1. LLM (Large Language Model) = "The Brain"
 
-Claude is an AI that understands human language. When you ask "Which campaign did best?", Claude understands what "best" means in a business context, writes the correct SQL query, and explains the results clearly. It is the intelligence behind the whole system.
+Claude is an AI that understands human language. When you ask "Which campaign did best?", Claude understands what "best" means in a business context, writes the correct SQL query, and explains the results clearly. It is the intelligence behind the whole system. When the knowledge base has no relevant answer, Claude can fall back on its own trained knowledge (e.g., providing a general definition of "enrollment").
 
 ### 2. RAG (Retrieval-Augmented Generation) = "The Reference Book"
 
-Claude is smart, but it does not know YOUR specific campaign data. RAG solves this by giving Claude a "reference book" — a searchable collection of campaign descriptions, performance summaries, and business term definitions. Before answering, the system looks up the most relevant pages from this book and hands them to Claude. This way, Claude's answers are grounded in your actual business data, not just general knowledge.
+Claude is smart, but it does not know YOUR specific campaign data. RAG solves this by giving Claude a "reference book" — a searchable collection of campaign descriptions, performance summaries, and business term definitions. Documents are first chunked into smaller pieces, then embedded as vectors and stored in ChromaDB. Before answering, the system looks up the most relevant chunks and hands them to Claude. This way, Claude's answers are grounded in your actual business data, not just general knowledge.
 
 ### 3. AI Agent = "The Manager"
 
@@ -197,21 +252,34 @@ The agent is the decision-maker. It has three tools (SQL queries, knowledge sear
 ### How they work together
 
 ```mermaid
-flowchart TD
+flowchart LR
     Q["Your Question"] --> Agent{"AI Agent<br/>(decides what to do)"}
-    Agent -->|Data question| SQL["SQL Tool<br/>Queries the database"]
-    Agent -->|Context question| RAG["RAG Tool<br/>Searches knowledge base"]
-    Agent -->|Report request| Report["Summary Tool<br/>Combines DB + RAG + LLM"]
-    SQL --> Combine["Agent combines results"]
+
+    subgraph cat1["Category 1: RAG Pipeline"]
+        RAG["RAG Tool<br/>Searches knowledge base"]
+    end
+
+    subgraph cat2["Category 2: LLM Intelligence"]
+        SQL["SQL Tool<br/>Queries the database"]
+        Report["Summary Tool<br/>Combines DB + RAG + LLM"]
+        Combine["Agent synthesizes results"]
+    end
+
+    Agent -->|Data question| SQL
+    Agent -->|Context question| RAG
+    Agent -->|Report request| Report
+    SQL --> Combine
     RAG --> Combine
     Report --> Combine
     Combine --> Answer["Friendly answer<br/>back to you"]
 
     style Q fill:#e1f5fe
     style Agent fill:#fff3e0
-    style SQL fill:#e8f5e9
+    style cat1 fill:#e8f5e9
+    style cat2 fill:#fce4ec
+    style SQL fill:#fce4ec
     style RAG fill:#e8f5e9
-    style Report fill:#e8f5e9
+    style Report fill:#fce4ec
     style Combine fill:#fff3e0
     style Answer fill:#e1f5fe
 ```
@@ -231,20 +299,27 @@ graph TB
         Health["GET /health"]
     end
 
-    subgraph AgentLayer["LangChain Agent (agent/campaign_agent.py)"]
-        Exec["AgentExecutor + ConversationBufferMemory"]
-        T1["sql_query_tool"]
-        T2["rag_search_tool"]
-        T3["performance_summary_tool"]
+    subgraph cat2["Category 2: LLM Intelligence (llm/)"]
+        direction TB
+        Provider["LLM Provider<br/>(llm/provider.py)"]
+        AgentMod["Campaign Agent<br/>(llm/agent.py)"]
+        T1["sql_query_tool<br/>(llm/tools/sql_query.py)"]
+        T2["rag_search_tool<br/>(llm/tools/rag_search.py)"]
+        T3["performance_summary_tool<br/>(llm/tools/performance_summary.py)"]
+        Claude["Claude claude-sonnet-4-20250514"]
     end
 
-    subgraph LLMLayer["Claude LLM"]
-        Claude["claude-sonnet-4-20250514"]
-    end
-
-    subgraph DataLayer["Data Storage"]
-        SQLite["SQLite DB<br/>(campaign.db)"]
+    subgraph cat1["Category 1: RAG Pipeline (rag/)"]
+        direction TB
+        DocMod["Document Sources<br/>(rag/documents.py)"]
+        ChunkMod["Text Chunker<br/>(rag/chunking.py)"]
+        VecStore["Vector Store<br/>(rag/vector_store.py)"]
         Chroma["ChromaDB<br/>(vector embeddings)"]
+    end
+
+    subgraph DataLayer["Data Infrastructure"]
+        SQLite["SQLite DB<br/>(campaign.db)"]
+        Config["Config<br/>(config/settings.py)"]
     end
 
     subgraph DataGen["Data Generation"]
@@ -252,26 +327,32 @@ graph TB
         CSV["CSV Files"]
     end
 
-    Ask --> Exec
-    Summary --> Exec
+    Ask --> AgentMod
+    Summary --> AgentMod
     AskSQL --> T1
     AskSearch --> T2
     Campaigns --> SQLite
-    Exec <--> Claude
-    Exec --> T1
-    Exec --> T2
-    Exec --> T3
+    AgentMod <--> Claude
+    AgentMod --> T1
+    AgentMod --> T2
+    AgentMod --> T3
+    Provider --> Claude
     T1 --> SQLite
-    T2 --> Chroma
+    T1 --> Provider
+    T2 --> VecStore
     T3 --> SQLite
-    T3 --> Chroma
+    T3 --> VecStore
+    T3 --> Provider
+    DocMod --> ChunkMod
+    ChunkMod --> VecStore
+    VecStore --> Chroma
     Mock --> CSV
     CSV --> SQLite
 
     style API fill:#e3f2fd
-    style AgentLayer fill:#fff8e1
-    style LLMLayer fill:#fce4ec
-    style DataLayer fill:#e8f5e9
+    style cat2 fill:#fce4ec
+    style cat1 fill:#e8f5e9
+    style DataLayer fill:#f5f5f5
     style DataGen fill:#f3e5f5
 ```
 
@@ -283,20 +364,33 @@ graph TB
 campaign_performance_analysis/
 ├── config/
 │   ├── __init__.py
-│   └── settings.py                # Centralized configuration & constants
+│   └── settings.py                          # Centralized configuration & constants
 ├── database/
 │   ├── __init__.py
-│   ├── campaign_db.py             # SQLite loader, schema, safe query exec
+│   ├── campaign_db.py                       # SQLite loader, schema, safe query exec
 │   └── data/
 │       ├── __init__.py
-│       └── generate_mock_data.py  # Faker-based CSV data generator
-├── rag/
-│   ├── __init__.py
-│   └── vector_store.py            # ChromaDB knowledge base & search
-├── agent/
-│   ├── __init__.py
-│   └── campaign_agent.py          # LangChain agent with 3 tools
-├── app.py                         # FastAPI REST API server
+│       └── generate_mock_data.py            # Faker-based CSV data generator
+│
+├── rag/                                     # CATEGORY 1: RAG Pipeline (Knowledge Retrieval)
+│   ├── __init__.py                          #   Public API re-exports
+│   ├── documents.py                         #   Step 1: Document sources
+│   ├── chunking.py                          #   Step 2: Text splitting
+│   └── vector_store.py                      #   Steps 3-4, 6-8: Embed, Store, Search
+│
+├── llm/                                     # CATEGORY 2: LLM Intelligence (Content Generation)
+│   ├── __init__.py                          #   Public API re-exports
+│   ├── provider.py                          #   Claude LLM init + system prompt
+│   ├── tools/
+│   │   ├── __init__.py                      #   ALL_TOOLS list
+│   │   ├── sql_query.py                     #   Steps 9-11: NL → SQL → execute
+│   │   ├── rag_search.py                    #   Bridge to Category 1 (Steps 6-8)
+│   │   └── performance_summary.py           #   Steps 9-11: Hybrid DB+RAG report
+│   └── agent.py                             #   Steps 5, 9-11: LangGraph react agent
+│
+├── postman/
+│   └── collections/                         # API test collection
+├── app.py                                   # FastAPI REST API server
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -397,15 +491,16 @@ curl http://localhost:8000/campaigns/CMP-003/summary
 
 ## Tech Stack
 
-| Component      | Technology                               | What It Does                                       |
-|----------------|------------------------------------------|----------------------------------------------------|
-| AI Brain       | Claude (claude-sonnet-4-20250514)                  | Understands questions, writes SQL, generates summaries |
-| Orchestration  | LangChain                                | Orchestrates tools and manages conversation        |
-| Knowledge Store| ChromaDB                                 | Stores and searches campaign knowledge by meaning  |
-| Embeddings     | sentence-transformers (all-MiniLM-L6-v2) | Converts text into numerical meaning vectors       |
-| Database       | SQLite                                   | Stores campaign data (file-based, no server)       |
-| REST API       | FastAPI + Uvicorn                        | HTTP endpoints with auto-generated Swagger docs    |
-| Mock Data      | Faker                                    | Generates realistic mock campaign data             |
+| Component      | Technology                               | Category | What It Does                                       |
+|----------------|------------------------------------------|----------|----------------------------------------------------|
+| AI Brain       | Claude (claude-sonnet-4-20250514)                  | LLM      | Understands questions, writes SQL, generates summaries |
+| Orchestration  | LangChain + LangGraph                    | LLM      | Agent orchestration, tool management, conversation state |
+| Knowledge Store| ChromaDB                                 | RAG      | Stores and searches campaign knowledge by meaning  |
+| Text Chunking  | langchain-text-splitters                 | RAG      | Splits documents into overlapping chunks for better retrieval |
+| Embeddings     | sentence-transformers (all-MiniLM-L6-v2) | RAG      | Converts text into numerical meaning vectors       |
+| Database       | SQLite                                   | Infra    | Stores campaign data (file-based, no server)       |
+| REST API       | FastAPI + Uvicorn                        | Infra    | HTTP endpoints with auto-generated Swagger docs    |
+| Mock Data      | Faker                                    | Infra    | Generates realistic mock campaign data             |
 
 ---
 
