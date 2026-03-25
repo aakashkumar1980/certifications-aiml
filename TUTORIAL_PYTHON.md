@@ -50,6 +50,10 @@ This separation means you could swap your vector database (only touching `rag/`)
 
 ### What is `__init__.py`?
 
+> **Jargon: Package** — A folder with an `__init__.py` file that Python treats as an importable unit. Packages let you organize code into logical groups (e.g., `rag/`, `llm/`).
+
+> **Jargon: Module** — A single `.py` file. A package contains modules.
+
 Every folder with an `__init__.py` file becomes a **Python package**. This allows imports like:
 
 ```python
@@ -74,6 +78,12 @@ Without `__init__.py`, Python would not recognize these folders as importable pa
 
 ### What is a class?
 
+> **Jargon: Class** — A blueprint for creating objects. Defines what data (attributes) and behavior (methods) an object will have.
+
+> **Jargon: Instance** — A specific object created from a class. `store = VectorStore()` creates one instance. You can create many instances from the same class, each with different data.
+
+> **Jargon: Constructor (`__init__`)** — The special method that runs when you create an instance. Sets up the object's initial state.
+
 A class is a blueprint for creating objects. Objects bundle related data and functions together.
 
 ```python
@@ -97,6 +107,10 @@ results = store.search("What is ROI?")
 
 ### Why classes instead of plain functions?
 
+> **Jargon: Encapsulation** — Bundling data and the functions that operate on it into a single unit (the class), hiding internal details from outside code.
+
+> **Jargon: Lazy Initialization** — Delaying the creation of an expensive resource (like a database connection) until it's actually needed. In the example above, `self._collection = None` starts as empty and is only created when first accessed.
+
 - **Encapsulation** — Related data (paths, model names) and behavior (build, search) live together
 - **Reusability** — You can create multiple instances with different settings
 - **State** — The object remembers its configuration (db_path, collection handle) across method calls
@@ -108,6 +122,8 @@ results = store.search("What is ROI?")
 ## Step 3: Decorators
 
 ### What is a decorator?
+
+> **Jargon: Decorator** — A function that wraps another function to add extra behavior, written with `@` above the function definition. The original function stays unchanged; the decorator adds something on top (like registering it as an API route or an AI tool).
 
 A decorator is a function that wraps another function to add extra behavior. Written with `@` above the function.
 
@@ -148,6 +164,8 @@ A decorator is like gift wrapping. The gift (function) stays the same inside, bu
 ## Step 4: Environment Variables and `.env` Files
 
 ### What are environment variables?
+
+> **Jargon: Environment Variable** — A key-value pair stored outside your code, in the operating system's environment. Programs read these at runtime. Used for secrets (API keys), configuration (database URLs), and settings that change between environments (dev vs. production).
 
 Sensitive values (like API keys) should never be written directly in code. Instead, they are stored in environment variables.
 
@@ -210,6 +228,8 @@ You can test each module individually by running it as a script, but when the ma
 
 ### What is a list comprehension?
 
+> **Jargon: List Comprehension** — A one-line Python syntax for creating lists by transforming or filtering existing data. Replaces multi-line `for` loops with a compact `[expression for item in iterable]` format.
+
 A compact way to build lists from existing data.
 
 ```python
@@ -245,6 +265,8 @@ chunk_ids = [f"{doc_id}_chunk{i}" for i in range(len(chunks))]
 ## Step 7: Context Managers (`with` Statement)
 
 ### What is a context manager?
+
+> **Jargon: Context Manager** — A Python pattern (using `with`) that automatically sets up and cleans up resources. Guarantees cleanup happens even if an error occurs. Common for files, database connections, and network sockets.
 
 Ensures resources (files, database connections) are properly cleaned up, even if an error occurs.
 
@@ -289,6 +311,10 @@ app = FastAPI(lifespan=lifespan)
 
 ### What are type hints?
 
+> **Jargon: Type Hint / Annotation** — Optional labels on function parameters and return values that specify the expected data type. Python does NOT enforce them at runtime — they serve as documentation for developers and tools.
+
+> **Jargon: Pydantic** — A data validation library that DOES enforce type hints at runtime. FastAPI uses Pydantic to automatically validate incoming JSON requests against your type-annotated models.
+
 Annotations that tell developers (and tools) what type a parameter or return value should be.
 
 ```python
@@ -314,6 +340,35 @@ class AskResponse(BaseModel):
 ---
 
 ## Step 9: Key Libraries for AI Applications
+
+Here is how the libraries map to the two-category architecture:
+
+```mermaid
+flowchart TB
+    subgraph cat2["Category 2: LLM Intelligence"]
+        LC["LangChain — LLM wrappers, tool definitions"]
+        LG["LangGraph — Agent orchestration, ReAct loop"]
+        Anthropic["langchain-anthropic — Claude integration"]
+    end
+
+    subgraph cat1["Category 1: RAG Pipeline"]
+        Chroma["ChromaDB — Vector database"]
+        ST["sentence-transformers — Embedding model"]
+        TS["langchain-text-splitters — Chunking"]
+    end
+
+    subgraph infra["Infrastructure"]
+        FastAPI["FastAPI — REST API"]
+        SQLite["sqlite3 — Database (built-in)"]
+        Faker["Faker — Test data generation"]
+        DotEnv["python-dotenv — Secret management"]
+        Logging["logging — Structured logs (built-in)"]
+    end
+
+    style cat2 fill:#fce4ec
+    style cat1 fill:#e8f5e9
+    style infra fill:#f5f5f5
+```
 
 ### LangChain + LangGraph — AI orchestration
 
@@ -567,6 +622,12 @@ sudo apt install python3.12 python3.12-venv python3.12-dev
 ```
 
 ### Create a virtual environment
+
+> **Jargon: Virtual Environment (venv)** — An isolated Python installation specific to one project. Each venv has its own `pip` and installed packages, completely separate from other projects and the system Python.
+
+> **Jargon: pip** — Python's package installer. Reads `requirements.txt` to know what packages (and versions) to install.
+
+> **Jargon: requirements.txt** — A file listing all packages your project needs, one per line (e.g., `langchain==0.2.0`, `chromadb>=0.4.0`). Ensures every developer installs the same versions.
 
 ```bash
 python3 -m venv venv            # Create

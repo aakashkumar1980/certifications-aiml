@@ -63,6 +63,8 @@ flowchart TB
 
 ### What is an LLM?
 
+> **Jargon: LLM (Large Language Model)** — An AI model trained on massive amounts of text that can understand and generate human language. "Large" refers to the billions of **parameters** (learned numbers) inside the model.
+
 A Large Language Model is an AI that understands and generates human language. Think of it as a very smart auto-complete — but instead of finishing your sentence, it can write database queries, summarize data, and have multi-turn conversations.
 
 ### Popular LLMs
@@ -83,6 +85,12 @@ A Large Language Model is an AI that understands and generates human language. T
 
 ### Key Configuration Parameters
 
+> **Jargon: Token** — A unit of text the LLM processes. Roughly 1 token ≈ ¾ of a word. "Hello world" = 2 tokens. "Enrollment rate" = 2 tokens. Token limits control how much the LLM can read (context window) and write (max tokens).
+
+> **Jargon: Temperature** — A number (0 to 1) that controls randomness. At `0`, the LLM always picks the most likely next word (deterministic — best for data queries). At `1`, it explores less likely words (creative — good for brainstorming).
+
+> **Jargon: Inference** — When the LLM generates a response. This is the "running" phase (as opposed to the "training" phase when the model was built). Each API call is one inference.
+
 | Parameter | What It Controls | Typical Value |
 |-----------|-----------------|---------------|
 | **Model** | Which LLM to use | `claude-sonnet-4-20250514` |
@@ -101,11 +109,37 @@ The LLM is like a very experienced analyst who speaks both "human language" and 
 
 ### What is RAG?
 
+> **Jargon: RAG (Retrieval-Augmented Generation)** — A technique where the AI first *retrieves* relevant information from a knowledge base, then *generates* an answer using that information. "Retrieval" = look it up. "Augmented" = enrich the prompt. "Generation" = LLM writes the answer.
+
 RAG is a technique where the AI first *retrieves* relevant information from a knowledge base, and then *generates* an answer using that information. Without RAG, the AI only knows what it was trained on. With RAG, it can access your specific domain data.
 
 ### Why is RAG needed?
 
 An LLM knows general things about the world, but it does NOT know your specific data — your company's products, your internal terminology, your policies, your metrics. RAG bridges this gap by giving the LLM a "reference book" to consult before answering.
+
+### What should go in the vector DB vs. what the LLM already knows?
+
+```mermaid
+flowchart LR
+    subgraph VDB["Vector DB — Company-Specific Data"]
+        V1["Campaign names & descriptions"]
+        V2["Target segments & budgets"]
+        V3["Partner merchants & reward structures"]
+        V4["Internal policies & procedures"]
+    end
+
+    subgraph LLM_K["LLM — Already Knows"]
+        L1["Business definitions (ROI, CPE)"]
+        L2["Metric formulas & benchmarks"]
+        L3["Industry knowledge"]
+        L4["General language understanding"]
+    end
+
+    style VDB fill:#e8f5e9
+    style LLM_K fill:#fce4ec
+```
+
+**Rule of thumb:** If the LLM could reasonably answer it without your data, don't put it in the vector DB. Only store what is unique to your organization.
 
 ### How RAG works — The 11-Step Pipeline
 
@@ -167,6 +201,8 @@ Imagine you are taking an open-book exam. The textbook is your knowledge base. R
 
 ### What is Chunking? (Step 2)
 
+> **Jargon: Chunking** — Splitting a large document into smaller, overlapping pieces before converting to vectors. Each chunk becomes one entry in the vector database. Smaller chunks = more precise retrieval.
+
 Documents are split into smaller, overlapping pieces before embedding. Why?
 
 - **Better retrieval** — A 200-character chunk specifically about "ROI calculation" is more relevant to an ROI question than a 2000-character document that mentions ROI in one sentence
@@ -192,25 +228,60 @@ Common chunking strategies:
 
 ### What is an Embedding?
 
-An embedding is a list of numbers (a "vector") that represents the *meaning* of text. Two sentences with similar meanings will have similar vectors, even if they use completely different words.
+> **Jargon: Embedding / Vector** — A list of numbers (typically 384 or 768) that represents the meaning of a chunk of text. Two chunks with similar meanings will have similar numbers, enabling search by meaning rather than exact keyword match.
+
+> **Jargon: Sentence Transformer** — A small, fast AI model (e.g., `all-MiniLM-L6-v2`) that converts text into embeddings. NOT the same as the LLM. Runs locally on CPU, no API key needed, produces vectors in milliseconds.
+
+An **embedding** is a list of numbers (a **vector**) that represents the *meaning* of an entire sentence or chunk — not individual words. The **sentence transformer** model reads all the words together and produces one single vector that captures the combined meaning.
 
 ```
-"The dog chased the cat"  → [0.12, 0.85, -0.33, 0.67, ...]  (384 numbers)
+"The dog chased the cat"    → [0.12, 0.85, -0.33, 0.67, ...]  (384 numbers)
 "A canine pursued a feline" → [0.11, 0.84, -0.31, 0.68, ...]  (very similar!)
 "Stock prices fell today"   → [-0.55, 0.12, 0.91, -0.23, ...]  (very different)
 ```
 
+This is why **semantic search** works — "student credit card offers" would match a chunk about "targeting student cardholders with 10% cashback" even though those exact words don't appear, because the *meanings* are similar.
+
 The embedding model (e.g., `all-MiniLM-L6-v2`) is a small, fast model — NOT the same as the LLM. It runs locally, has no API costs, and produces vectors in milliseconds.
+
+### How a Chunk is Stored in the Vector Database
+
+Each chunk is stored as a single entry with four fields:
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│ ID:       "desc_CMP-003_chunk0"                                     │
+│ Document: "Spring Dining Deal: A dining rewards campaign targeting  │
+│            student cardholders. Offers 10% cashback at partner      │
+│            restaurants including Olive Garden and Starbucks."       │
+│ Vector:   [0.042, -0.118, 0.231, 0.067, ..., -0.089]  (384 nums)  │
+│ Metadata: {type: "campaign_description", campaign_id: "CMP-003",   │
+│            chunk_index: 0, total_chunks: 2}                         │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+- **Document** — the original chunk text (stored as-is for retrieval)
+- **Vector** — the embedding (384 numbers representing the meaning of the entire chunk)
+- **Metadata** — structured tags for filtering (type, campaign ID, chunk position)
+
+> **Important:** The vector represents the meaning of the **whole sentence/chunk**, not individual words. This is different from older approaches like Word2Vec where each word got its own vector. Modern sentence transformers capture relationships between words — e.g., "not good" produces a very different vector from "good".
 
 ### Key Terms
 
+> **Jargon: Vector Database** — A specialized database that stores embeddings (vectors) and finds the "most similar" items by meaning. Unlike a regular database (which searches by exact match), a vector DB answers "what is closest in meaning to this query?"
+
+> **Jargon: Cosine Similarity** — The math formula used to measure how similar two vectors are. Returns a score from 0 (completely unrelated) to 1 (identical meaning). In ChromaDB, results are returned as **distance** (lower = more similar).
+
+> **Jargon: Semantic Search** — Searching by meaning rather than exact keywords. "student credit card offers" finds "targeting student cardholders with 10% cashback" because the meanings are similar, even though the words are different.
+
 | Term | Simple Definition |
 |------|------------------|
-| **Embedding** | A list of numbers representing the meaning of text. Similar texts → similar numbers. |
+| **Embedding / Vector** | A list of numbers representing the meaning of a text chunk. Similar texts → similar numbers. |
 | **Vector Database** | A database that stores embeddings and finds "most similar" items by meaning. |
 | **Sentence Transformer** | A small AI model that converts text into embeddings. Runs locally, no API needed. |
-| **Chunking** | Splitting documents into smaller pieces for more precise retrieval. |
-| **Cosine Similarity** | A math formula that measures how similar two vectors are. Score 0–1 (1 = identical). |
+| **Chunking** | Splitting documents into smaller overlapping pieces for more precise retrieval. |
+| **Cosine Similarity / Distance** | A measure of how similar two vectors are. Lower distance = more similar meaning. |
+| **Semantic Search** | Searching by meaning, not exact keywords. Powered by embeddings + cosine similarity. |
 
 ### Common Vector Databases
 
@@ -227,6 +298,10 @@ The embedding model (e.g., `all-MiniLM-L6-v2`) is a small, fast model — NOT th
 ## Step 5: AI Agent — The "Decision Maker" (Category 2)
 
 ### What is an AI Agent?
+
+> **Jargon: AI Agent** — An LLM that can *use tools* and *make decisions*. Unlike a simple chatbot (which just replies), an agent can take actions — run database queries, search documents, call APIs. It reasons about *what* to do, then *does* it.
+
+> **Jargon: Tool Calling / Function Calling** — When the LLM decides to invoke a specific function (tool) instead of just generating text. The LLM outputs a structured request like "call sql_query_tool with question='Which campaign has the highest ROI?'" and the framework executes it.
 
 An AI Agent is an LLM that can *use tools* and *make decisions* about which tool to use. Instead of just chatting, it can take actions — query a database, search a knowledge base, call an API, or generate a report.
 
@@ -277,6 +352,8 @@ flowchart TD
 6. It writes a final, human-readable answer
 
 ### The ReAct Pattern (Reason + Act)
+
+> **Jargon: ReAct (Reason + Act)** — A design pattern where the agent alternates between thinking ("I need data from the database") and acting (calling the SQL tool). This loop repeats until the agent has enough information to answer.
 
 Most modern agents use the **ReAct** pattern — the LLM alternates between:
 - **Reasoning:** "This question asks for data, I should use the SQL tool"
@@ -421,6 +498,10 @@ Regardless of the domain (healthcare, finance, e-commerce, legal), every RAG app
 Combining vector search (semantic) with structured queries (SQL/API) gives the best results. Vector search finds *context*; structured queries find *data*.
 
 ### Pattern: Augmented Prompt Assembly
+
+> **Jargon: Augmented Prompt** — The final prompt sent to the LLM, enriched with retrieved data (from RAG and/or SQL) before the LLM sees it. "Augmented" = the original question plus all the context the LLM needs to give a grounded answer.
+
+> **Jargon: Context Window** — The maximum amount of text the LLM can "see" at once (e.g., 200K tokens for Claude). The augmented prompt + the response must fit within this window. Chunking keeps documents small so they fit.
 
 The most critical step. The prompt sent to the LLM typically looks like:
 
