@@ -48,7 +48,7 @@ logger = logging.getLogger("rag_pipeline")
 from config.settings import Settings
 from database.campaign_db import init_database, execute_query, get_schema
 from rag.vector_store import build_knowledge_base, search_similar
-from agent.campaign_agent import CampaignAgent
+from llm.agent import CampaignAgent
 
 
 # --- Pydantic Models (Request / Response) ---
@@ -333,7 +333,7 @@ async def ask_sql(request: AskRequest):
     Returns:
         AskResponse with the SQL tool's result as the answer, plus the SQL query used.
     """
-    from agent.campaign_agent import sql_query_tool
+    from llm.tools.sql_query import sql_query_tool
 
     result = sql_query_tool.invoke(request.question)
     sql_query = None
