@@ -9,8 +9,11 @@ of documents are ingested:
 2. **Performance Summaries** — Narrative analysis of each campaign's KPIs.
 3. **Business Glossary** — Definitions of financial-services metrics and terms.
 
+Documents are chunked using LangChain's RecursiveCharacterTextSplitter
+before embedding, ensuring optimal retrieval granularity.
+
 At query time, the ``search_similar`` function performs a semantic similarity
-search against all ingested documents and returns the top-N matches along
+search against all ingested chunks and returns the top-N matches along
 with their metadata and distance scores.
 
 Persistence:
@@ -27,75 +30,53 @@ Example Usage::
 
 import os
 import sys
+import logging
 
 import chromadb
 from chromadb.utils import embedding_functions
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config.settings import Settings
+
+logger = logging.getLogger("rag_pipeline")
 
 
 class CampaignKnowledgeStore:
     """
     ChromaDB-backed vector store for campaign domain knowledge.
 
-    Handles embedding generation via HuggingFace sentence-transformers,
-    document ingestion into a named ChromaDB collection, and semantic
-    similarity retrieval.
+    Handles text chunking, embedding generation via HuggingFace
+    sentence-transformers, document ingestion into a named ChromaDB
+    collection, and semantic similarity retrieval.
 
     Attributes:
         chroma_dir (str): Filesystem path for ChromaDB persistent storage.
         collection_name (str): Name of the ChromaDB collection.
         embedding_model (str): HuggingFace model identifier for embeddings.
         _collection (chromadb.Collection | None): Lazily initialized collection handle.
-
-    Example::
-
-        store = CampaignKnowledgeStore()
-        store.build_knowledge_base()
-        hits = store.search_similar("enrollment rate benchmark")
     """
 
     def __init__(self, chroma_dir=None, collection_name=None, embedding_model=None):
-        """
-        Initialize the knowledge store with configurable paths and models.
-
-        Args:
-            chroma_dir (str, optional): Directory for ChromaDB persistence.
-                Defaults to ``Settings.CHROMA_DIR``.
-            collection_name (str, optional): Collection name in ChromaDB.
-                Defaults to ``Settings.CHROMA_COLLECTION``.
-            embedding_model (str, optional): Sentence-transformer model name.
-                Defaults to ``Settings.EMBEDDING_MODEL``.
-        """
         self.chroma_dir = chroma_dir or Settings.CHROMA_DIR
         self.collection_name = collection_name or Settings.CHROMA_COLLECTION
         self.embedding_model = embedding_model or Settings.EMBEDDING_MODEL
         self._collection = None
+        self._text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=Settings.CHUNK_SIZE,
+            chunk_overlap=Settings.CHUNK_OVERLAP,
+            length_function=len,
+            separators=["\n\n", "\n", ". ", ", ", " ", ""],
+        )
 
     def _get_embedding_function(self):
-        """
-        Create a HuggingFace sentence-transformer embedding function.
-
-        Returns:
-            SentenceTransformerEmbeddingFunction: Callable that converts
-                text strings into dense vector embeddings.
-        """
+        """Create a HuggingFace sentence-transformer embedding function."""
         return embedding_functions.SentenceTransformerEmbeddingFunction(
             model_name=self.embedding_model
         )
 
     def get_collection(self):
-        """
-        Get or create the ChromaDB collection (lazy singleton).
-
-        On first call, initializes a ``PersistentClient`` and retrieves
-        (or creates) the named collection. Subsequent calls return the
-        cached collection handle.
-
-        Returns:
-            chromadb.Collection: The campaign knowledge collection.
-        """
+        """Get or create the ChromaDB collection (lazy singleton)."""
         if self._collection is None:
             client = chromadb.PersistentClient(path=self.chroma_dir)
             self._collection = client.get_or_create_collection(
@@ -104,17 +85,39 @@ class CampaignKnowledgeStore:
             )
         return self._collection
 
-    def _get_campaign_descriptions(self):
+    def _chunk_document(self, text, doc_id, metadata):
         """
-        Return pre-authored campaign description documents.
+        Split a document into chunks and return lists ready for ChromaDB ingestion.
 
-        Each tuple contains (campaign_id, description_text). These serve
-        as the qualitative context layer — explaining what each campaign
-        is about, who it targets, and what rewards it offers.
+        Args:
+            text (str): The full document text.
+            doc_id (str): Base document ID (e.g., 'desc_CMP-001').
+            metadata (dict): Metadata to attach to each chunk.
 
         Returns:
-            list[tuple[str, str]]: List of (campaign_id, description) pairs.
+            tuple: (chunks_texts, chunks_metadatas, chunks_ids)
         """
+        chunks = self._text_splitter.split_text(text)
+        logger.info(
+            "  [STEP 2] CHUNKING: doc_id='%s' | original_length=%d chars | chunks_produced=%d | chunk_size=%d | overlap=%d",
+            doc_id, len(text), len(chunks), Settings.CHUNK_SIZE, Settings.CHUNK_OVERLAP,
+        )
+        for i, chunk in enumerate(chunks):
+            logger.debug("    Chunk %d/%d (%d chars): %.80s...", i + 1, len(chunks), len(chunk), chunk)
+
+        chunk_texts = []
+        chunk_metadatas = []
+        chunk_ids = []
+        for i, chunk in enumerate(chunks):
+            chunk_meta = {**metadata, "chunk_index": i, "total_chunks": len(chunks), "source_doc_id": doc_id}
+            chunk_texts.append(chunk)
+            chunk_metadatas.append(chunk_meta)
+            chunk_ids.append(f"{doc_id}_chunk{i}")
+
+        return chunk_texts, chunk_metadatas, chunk_ids
+
+    def _get_campaign_descriptions(self):
+        """Return pre-authored campaign description documents."""
         return [
             ("CMP-001",
              "Summer Cashback Bonanza: A cashback rewards campaign targeting premium cardholders. "
@@ -139,16 +142,7 @@ class CampaignKnowledgeStore:
         ]
 
     def _get_performance_summaries(self):
-        """
-        Return pre-authored performance summary narratives.
-
-        Each tuple contains (campaign_id, summary_text). These provide
-        the RAG system with pre-analyzed insights so it can answer
-        performance questions without always hitting the database.
-
-        Returns:
-            list[tuple[str, str]]: List of (campaign_id, summary) pairs.
-        """
+        """Return pre-authored performance summary narratives."""
         return [
             ("CMP-001",
              "CMP-001 Performance Summary: The Summer Cashback Bonanza achieved a 12% enrollment "
@@ -178,15 +172,7 @@ class CampaignKnowledgeStore:
         ]
 
     def _get_business_glossary(self):
-        """
-        Return business glossary definitions for financial-services terms.
-
-        These definitions help the LLM understand domain-specific concepts
-        and provide accurate, contextual answers to business users.
-
-        Returns:
-            list[str]: List of glossary definition strings.
-        """
+        """Return business glossary definitions for financial-services terms."""
         return [
             "Enrollment Rate: The percentage of users who enroll in a campaign after seeing it. "
             "Calculated as (enrollments / impressions) * 100. A good enrollment rate for credit "
@@ -214,16 +200,10 @@ class CampaignKnowledgeStore:
 
     def build_knowledge_base(self):
         """
-        Ingest all knowledge documents into the ChromaDB collection.
+        Ingest all knowledge documents into ChromaDB with chunking.
 
-        Combines campaign descriptions, performance summaries, and business
-        glossary entries into a single batch ingestion. Skips ingestion if
-        the collection is already populated (idempotent on non-empty stores).
-
-        Document IDs follow the convention:
-            - ``desc_CMP-XXX`` for campaign descriptions
-            - ``perf_CMP-XXX`` for performance summaries
-            - ``glossary_N`` for glossary entries
+        Documents are first split into chunks using RecursiveCharacterTextSplitter,
+        then each chunk is embedded and stored in ChromaDB.
 
         Returns:
             chromadb.Collection: The populated collection handle.
@@ -231,74 +211,118 @@ class CampaignKnowledgeStore:
         collection = self.get_collection()
 
         if collection.count() > 0:
-            print(f"  Collection already has {collection.count()} documents. Skipping ingestion.")
+            logger.info("[STEP 1-4] Knowledge base already populated with %d chunks. Skipping ingestion.", collection.count())
             return collection
 
-        documents, metadatas, ids = [], [], []
+        all_texts, all_metadatas, all_ids = [], [], []
+        total_original_docs = 0
 
-        # Ingest campaign descriptions
-        for cid, desc in self._get_campaign_descriptions():
-            documents.append(desc)
-            metadatas.append({"type": "campaign_description", "campaign_id": cid})
-            ids.append(f"desc_{cid}")
+        # --- STEP 1: Loading Documents ---
+        logger.info("=" * 80)
+        logger.info("[STEP 1] LOADING DOCUMENTS: Gathering campaign descriptions, performance summaries, and business glossary...")
 
-        # Ingest performance summaries
-        for cid, summary in self._get_performance_summaries():
-            documents.append(summary)
-            metadatas.append({"type": "performance_summary", "campaign_id": cid})
-            ids.append(f"perf_{cid}")
+        # Ingest campaign descriptions with chunking
+        descriptions = self._get_campaign_descriptions()
+        logger.info("[STEP 1] Loaded %d campaign descriptions", len(descriptions))
+        for cid, desc in descriptions:
+            total_original_docs += 1
+            texts, metas, ids = self._chunk_document(
+                desc, f"desc_{cid}", {"type": "campaign_description", "campaign_id": cid}
+            )
+            all_texts.extend(texts)
+            all_metadatas.extend(metas)
+            all_ids.extend(ids)
 
-        # Ingest business glossary
-        for i, definition in enumerate(self._get_business_glossary()):
-            documents.append(definition)
-            metadatas.append({"type": "business_glossary"})
-            ids.append(f"glossary_{i}")
+        # Ingest performance summaries with chunking
+        summaries = self._get_performance_summaries()
+        logger.info("[STEP 1] Loaded %d performance summaries", len(summaries))
+        for cid, summary in summaries:
+            total_original_docs += 1
+            texts, metas, ids = self._chunk_document(
+                summary, f"perf_{cid}", {"type": "performance_summary", "campaign_id": cid}
+            )
+            all_texts.extend(texts)
+            all_metadatas.extend(metas)
+            all_ids.extend(ids)
 
-        collection.add(documents=documents, metadatas=metadatas, ids=ids)
-        print(f"  Ingested {len(documents)} documents into '{self.collection_name}' collection")
+        # Ingest business glossary with chunking
+        glossary = self._get_business_glossary()
+        logger.info("[STEP 1] Loaded %d business glossary entries", len(glossary))
+        for i, definition in enumerate(glossary):
+            total_original_docs += 1
+            texts, metas, ids = self._chunk_document(
+                definition, f"glossary_{i}", {"type": "business_glossary"}
+            )
+            all_texts.extend(texts)
+            all_metadatas.extend(metas)
+            all_ids.extend(ids)
+
+        logger.info("[STEP 2] CHUNKING COMPLETE: %d original documents → %d chunks (chunk_size=%d, overlap=%d)",
+                     total_original_docs, len(all_texts), Settings.CHUNK_SIZE, Settings.CHUNK_OVERLAP)
+
+        # --- STEP 3: Embedding Chunks ---
+        logger.info("[STEP 3] EMBEDDING CHUNKS: Encoding %d chunks using model '%s'...", len(all_texts), self.embedding_model)
+
+        # --- STEP 4: Storing in Vector Database ---
+        collection.add(documents=all_texts, metadatas=all_metadatas, ids=all_ids)
+        logger.info("[STEP 4] STORED IN VECTOR DATABASE: %d chunks ingested into ChromaDB collection '%s' at '%s'",
+                     len(all_texts), self.collection_name, self.chroma_dir)
+        logger.info("=" * 80)
+
         return collection
 
     def search_similar(self, query, n_results=None):
         """
         Perform semantic similarity search against the knowledge base.
 
-        Embeds the query string using the same sentence-transformer model
-        used during ingestion, then retrieves the closest documents by
-        cosine distance from ChromaDB.
-
         Args:
             query (str): Natural language search query.
             n_results (int, optional): Maximum number of results to return.
-                Defaults to ``Settings.RAG_DEFAULT_RESULTS`` (3).
 
         Returns:
-            list[dict]: List of result dictionaries, each containing:
-                - ``content`` (str): The matched document text.
-                - ``metadata`` (dict): Document metadata (type, campaign_id).
-                - ``distance`` (float | None): Cosine distance score.
-                Lower distance = higher relevance.
-
-        Example::
-
-            results = store.search_similar("best performing campaign")
-            for r in results:
-                print(r["metadata"]["type"], r["distance"])
+            list[dict]: List of result dictionaries with content, metadata, distance.
         """
         n_results = n_results or Settings.RAG_DEFAULT_RESULTS
         collection = self.get_collection()
 
         if collection.count() == 0:
+            logger.warning("[STEP 7] Semantic search skipped — collection is empty.")
             return []
+
+        # --- STEP 6: Embedding Query ---
+        logger.info("-" * 80)
+        logger.info("[STEP 6] EMBEDDING QUERY: Encoding user query using '%s'", self.embedding_model)
+        logger.info("[STEP 6] Query text: \"%s\"", query)
+
+        # --- STEP 7: Semantic Search ---
+        logger.info("[STEP 7] SEMANTIC SEARCH: Finding top-%d closest vectors (cosine similarity) in collection '%s' (%d chunks)...",
+                     n_results, self.collection_name, collection.count())
 
         results = collection.query(query_texts=[query], n_results=n_results)
 
+        # --- STEP 8: Retrieving Semantically Closest Chunks ---
         formatted = []
         for i in range(len(results["documents"][0])):
+            distance = results["distances"][0][i] if results.get("distances") else None
+            metadata = results["metadatas"][0][i]
+            content = results["documents"][0][i]
             formatted.append({
-                "content": results["documents"][0][i],
-                "metadata": results["metadatas"][0][i],
-                "distance": results["distances"][0][i] if results.get("distances") else None,
+                "content": content,
+                "metadata": metadata,
+                "distance": distance,
             })
+            logger.info(
+                "[STEP 8] RETRIEVED CHUNK %d: type=%s | campaign=%s | distance=%.4f | chunk=%d/%d | preview=\"%.100s...\"",
+                i + 1,
+                metadata.get("type", "unknown"),
+                metadata.get("campaign_id", "N/A"),
+                distance if distance is not None else -1,
+                metadata.get("chunk_index", 0) + 1,
+                metadata.get("total_chunks", 1),
+                content,
+            )
+
+        logger.info("-" * 80)
         return formatted
 
 
@@ -308,17 +332,18 @@ _default_store = CampaignKnowledgeStore()
 
 
 def build_knowledge_base():
-    """Build the knowledge base using default settings. See ``CampaignKnowledgeStore.build_knowledge_base``."""
+    """Build the knowledge base using default settings."""
     return _default_store.build_knowledge_base()
 
 
 def search_similar(query, n_results=None):
-    """Search for similar documents. See ``CampaignKnowledgeStore.search_similar``."""
+    """Search for similar documents."""
     return _default_store.search_similar(query, n_results)
 
 
 # --- Script Entry Point ---
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     print("Building knowledge base...")
     store = CampaignKnowledgeStore()
     store.build_knowledge_base()

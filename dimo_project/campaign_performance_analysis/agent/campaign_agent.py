@@ -26,6 +26,7 @@ Example Usage::
 import os
 import sys
 import json
+import logging
 
 from dotenv import load_dotenv
 from langchain_anthropic import ChatAnthropic
@@ -39,6 +40,8 @@ from database.campaign_db import get_schema, execute_query
 from rag.vector_store import search_similar
 
 load_dotenv()
+
+logger = logging.getLogger("rag_pipeline")
 
 # --- System Prompt ---
 SYSTEM_PROMPT = (
@@ -62,18 +65,7 @@ SYSTEM_PROMPT = (
 # --- Tool Definitions ---
 
 def _get_llm():
-    """
-    Create a ChatAnthropic LLM instance with project-wide settings.
-
-    Reads the API key from ``Settings.ANTHROPIC_API_KEY`` and applies
-    the model name, temperature, and max_tokens from ``config.settings``.
-
-    Returns:
-        ChatAnthropic: Configured LangChain Claude chat model.
-
-    Raises:
-        ValueError: If ``ANTHROPIC_API_KEY`` is not set in the environment.
-    """
+    """Create a ChatAnthropic LLM instance with project-wide settings."""
     Settings.validate()
     return ChatAnthropic(
         model=Settings.LLM_MODEL,
@@ -103,6 +95,9 @@ def sql_query_tool(question: str) -> str:
         Formatted string containing the generated SQL and query results,
         or an error message if generation/execution fails.
     """
+    logger.info("=" * 80)
+    logger.info("[SQL TOOL] Received question: \"%s\"", question)
+
     schema = get_schema()
     llm = _get_llm()
 
@@ -118,21 +113,31 @@ def sql_query_tool(question: str) -> str:
         "- Limit results to 20 rows maximum"
     )
     try:
+        logger.info("[SQL TOOL] Sending schema + question to Claude for SQL generation...")
+        logger.debug("[SQL TOOL] SQL generation prompt:\n%s", sql_prompt)
         response = llm.invoke(sql_prompt)
         sql = response.content.strip()
 
         # Strip markdown code fences if the model wraps the SQL
         sql = sql.replace("```sql", "").replace("```", "").strip()
 
+        logger.info("[SQL TOOL] Generated SQL: %s", sql)
+        logger.info("[SQL TOOL] Executing SQL against SQLite database at '%s'...", Settings.DB_PATH)
+
         results = execute_query(sql)
 
         if isinstance(results, str):
+            logger.warning("[SQL TOOL] Query returned message: %s", results)
             return f"SQL: {sql}\n\nResult: {results}"
 
         result_str = json.dumps(results, indent=2, default=str)
+        logger.info("[SQL TOOL] Query returned %d rows", len(results))
+        logger.debug("[SQL TOOL] Results:\n%s", result_str[:500])
+        logger.info("=" * 80)
         return f"SQL: {sql}\n\nResults ({len(results)} rows):\n{result_str}"
 
     except Exception as e:
+        logger.error("[SQL TOOL] Error: %s", str(e))
         return f"Error generating/executing SQL: {str(e)}"
 
 
@@ -155,9 +160,14 @@ def rag_search_tool(query: str) -> str:
         Formatted string with up to 3 relevant knowledge base documents,
         each annotated with its type and campaign ID (if applicable).
     """
+    logger.info("=" * 80)
+    logger.info("[RAG TOOL] Received search query: \"%s\"", query)
+
     try:
+        # Steps 6, 7, 8 are logged inside search_similar()
         results = search_similar(query, n_results=Settings.RAG_DEFAULT_RESULTS)
         if not results:
+            logger.warning("[RAG TOOL] No relevant documents found.")
             return "No relevant documents found in the knowledge base."
 
         formatted_parts = []
@@ -167,9 +177,14 @@ def rag_search_tool(query: str) -> str:
             formatted_parts.append(
                 f"[Source {i}] Type: {doc_type} | Campaign: {campaign_id}\n{r['content']}"
             )
-        return "\n\n---\n\n".join(formatted_parts)
+
+        output = "\n\n---\n\n".join(formatted_parts)
+        logger.info("[RAG TOOL] Returning %d source chunks to agent", len(results))
+        logger.info("=" * 80)
+        return output
 
     except Exception as e:
+        logger.error("[RAG TOOL] Error: %s", str(e))
         return f"Error searching knowledge base: {str(e)}"
 
 
@@ -192,6 +207,9 @@ def performance_summary_tool(campaign_id: str) -> str:
         A 3-4 paragraph narrative covering enrollment trends, redemption
         patterns, ROI analysis, and recommendations.
     """
+    logger.info("=" * 80)
+    logger.info("[PERF TOOL] Generating summary for campaign: %s", campaign_id)
+
     try:
         # Fetch monthly performance metrics joined with campaign info
         perf_sql = (
@@ -200,22 +218,27 @@ def performance_summary_tool(campaign_id: str) -> str:
             f"JOIN campaigns c ON cp.campaign_id = c.campaign_id "
             f"WHERE cp.campaign_id = '{campaign_id}' ORDER BY cp.month"
         )
+        logger.info("[PERF TOOL] Executing performance SQL: %s", perf_sql)
         perf_data = execute_query(perf_sql)
 
         # Fetch aggregate enrollment and redemption stats
-        enroll_data = execute_query(
-            f"SELECT COUNT(*) as total_enrollments FROM enrollments WHERE campaign_id = '{campaign_id}'"
-        )
-        redeem_data = execute_query(
+        enroll_sql = f"SELECT COUNT(*) as total_enrollments FROM enrollments WHERE campaign_id = '{campaign_id}'"
+        redeem_sql = (
             f"SELECT COUNT(*) as total_redemptions, SUM(redemption_amount) as total_amount "
             f"FROM redemptions WHERE campaign_id = '{campaign_id}'"
         )
+        logger.info("[PERF TOOL] Executing enrollment SQL: %s", enroll_sql)
+        enroll_data = execute_query(enroll_sql)
+        logger.info("[PERF TOOL] Executing redemption SQL: %s", redeem_sql)
+        redeem_data = execute_query(redeem_sql)
 
-        # Supplement with RAG context for qualitative insights
+        # Supplement with RAG context for qualitative insights (logs steps 6-8 internally)
+        logger.info("[PERF TOOL] Searching RAG for qualitative context...")
         rag_context = search_similar(f"performance summary for {campaign_id}", n_results=2)
         rag_text = "\n".join([r["content"] for r in rag_context])
 
         if isinstance(perf_data, str):
+            logger.warning("[PERF TOOL] No performance data found: %s", perf_data)
             return f"Could not find performance data for {campaign_id}: {perf_data}"
 
         # Assemble all data for the summary prompt
@@ -225,7 +248,7 @@ def performance_summary_tool(campaign_id: str) -> str:
             "redemption_totals": redeem_data,
         }, indent=2, default=str)
 
-        llm = _get_llm()
+        # --- STEP 9: Contextually Augmented Prompt ---
         summary_prompt = (
             f"Generate a concise business-friendly performance summary for campaign {campaign_id}.\n\n"
             f"Data:\n{data_payload}\n\n"
@@ -233,11 +256,26 @@ def performance_summary_tool(campaign_id: str) -> str:
             "Format: 3-4 paragraphs covering enrollment trends, redemption patterns, "
             "ROI analysis, and a recommendation. Use specific numbers from the data."
         )
+        logger.info("[STEP 9] CONTEXTUALLY AUGMENTED PROMPT constructed:")
+        logger.info("[STEP 9]   DB results: %d performance rows, enrollment totals, redemption totals", len(perf_data))
+        logger.info("[STEP 9]   RAG context: %d chunks retrieved", len(rag_context))
+        logger.debug("[STEP 9]   Full prompt:\n%s", summary_prompt[:1000])
+
+        # --- STEP 10: Fed to LLM ---
+        llm = _get_llm()
+        logger.info("[STEP 10] FED TO LLM: Sending augmented prompt to '%s' (temperature=%s, max_tokens=%d)...",
+                     Settings.LLM_MODEL, Settings.LLM_TEMPERATURE, Settings.LLM_MAX_TOKENS)
 
         response = llm.invoke(summary_prompt)
+
+        # --- STEP 11: LLM Response ---
+        logger.info("[STEP 11] LLM RESPONSE received (%d chars): \"%.200s...\"",
+                     len(response.content), response.content)
+        logger.info("=" * 80)
         return response.content
 
     except Exception as e:
+        logger.error("[PERF TOOL] Error: %s", str(e))
         return f"Error generating performance summary: {str(e)}"
 
 
@@ -248,29 +286,9 @@ class CampaignAgent:
     Wraps a LangGraph react agent with three domain-specific tools
     (SQL, RAG, performance summary) and maintains chat history for
     multi-turn conversations.
-
-    The agent uses Claude as its reasoning engine and follows a tool-calling
-    pattern: it decides which tool(s) to invoke based on the user's question,
-    executes them, and synthesizes the results into a business-friendly answer.
-
-    Example::
-
-        agent = CampaignAgent()
-        result = agent.ask("Which campaign has the highest ROI?")
-        print(result["answer"])
-        print(result["sql_query"])  # SQL used, if any
     """
 
     def __init__(self):
-        """
-        Initialize the campaign agent with tools, prompt, and memory.
-
-        Creates a LangGraph react agent backed by Claude, registers
-        all three tools, and sets up the system prompt.
-
-        Raises:
-            ValueError: If ANTHROPIC_API_KEY is not configured.
-        """
         llm = _get_llm()
         tools = [sql_query_tool, rag_search_tool, performance_summary_tool]
 
@@ -280,27 +298,29 @@ class CampaignAgent:
             prompt=SystemMessage(content=SYSTEM_PROMPT),
         )
         self.chat_history = []
+        logger.info("[AGENT] CampaignAgent initialized with %d tools: %s",
+                     len(tools), [t.name for t in tools])
 
     def ask(self, question):
         """
         Send a question to the agent and return a structured response.
 
-        The agent may invoke one or more tools (SQL, RAG, summary) to
-        answer the question. The response includes the answer text plus
-        metadata about which tools were used.
-
         Args:
             question (str): Natural language question from the user.
 
         Returns:
-            dict: Response dictionary with keys:
-                - ``answer`` (str): The agent's natural language response.
-                - ``sql_query`` (str | None): The SQL query if sql_query_tool was used.
-                - ``sources`` (list[str]): RAG document excerpts if rag_search_tool was used.
+            dict: Response with keys: answer, sql_query, sources.
         """
         try:
+            # --- STEP 5: User Query ---
+            logger.info("=" * 80)
+            logger.info("[STEP 5] USER QUERY received: \"%s\"", question)
+            logger.info("[STEP 5] Agent will decide which tool(s) to invoke...")
+
             self.chat_history.append(HumanMessage(content=question))
 
+            # --- STEP 9/10: Agent reasoning loop (decides tools, builds augmented prompts, calls LLM) ---
+            logger.info("[STEP 9-10] AGENT REASONING: Invoking LangGraph react agent loop...")
             result = self.agent.invoke({"messages": self.chat_history})
 
             messages = result.get("messages", [])
@@ -334,9 +354,16 @@ class CampaignAgent:
                     elif tool_name == "rag_search_tool":
                         response["sources"].append(tool_output[:500])
 
+            # --- STEP 11: LLM Response ---
+            logger.info("[STEP 11] LLM RESPONSE (final answer): \"%.300s...\"", answer)
+            logger.info("[STEP 11] Metadata — SQL used: %s | RAG sources: %d",
+                         response["sql_query"] is not None, len(response["sources"]))
+            logger.info("=" * 80)
+
             return response
 
         except Exception as e:
+            logger.error("[AGENT] Error processing question: %s", str(e))
             return {
                 "answer": (
                     f"I encountered an error processing your question: {str(e)}. "
@@ -347,48 +374,26 @@ class CampaignAgent:
             }
 
     def clear_memory(self):
-        """
-        Clear the conversation history.
-
-        Resets the chat history so the agent starts fresh without
-        any prior conversation context.
-        """
+        """Clear the conversation history."""
         self.chat_history = []
+        logger.info("[AGENT] Chat history cleared.")
 
 
 # --- Module-Level Convenience Functions ---
 
 def create_agent():
-    """
-    Create and return a new CampaignAgent instance.
-
-    Convenience factory function for use by the Streamlit UI
-    and other entry points.
-
-    Returns:
-        CampaignAgent: A fully initialized agent ready for queries.
-    """
+    """Create and return a new CampaignAgent instance."""
     return CampaignAgent()
 
 
 def ask(agent, question):
-    """
-    Send a question to an existing agent instance.
-
-    Convenience wrapper that delegates to ``CampaignAgent.ask``.
-
-    Args:
-        agent (CampaignAgent): An initialized agent instance.
-        question (str): Natural language question.
-
-    Returns:
-        dict: Response dictionary (see ``CampaignAgent.ask``).
-    """
+    """Send a question to an existing agent instance."""
     return agent.ask(question)
 
 
 # --- Script Entry Point ---
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(name)s] %(levelname)s: %(message)s")
     print("Initializing Campaign Agent...")
     agent = CampaignAgent()
     print("Agent ready! Type 'quit' to exit.\n")

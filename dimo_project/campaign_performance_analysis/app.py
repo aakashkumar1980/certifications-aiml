@@ -28,6 +28,7 @@ Environment Variables:
 
 import os
 import sys
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
@@ -35,6 +36,14 @@ from pydantic import BaseModel, Field
 
 # Add project root to path for package imports
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# --- Configure RAG Pipeline Logging ---
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+logger = logging.getLogger("rag_pipeline")
 
 from config.settings import Settings
 from database.campaign_db import init_database, execute_query, get_schema
@@ -145,18 +154,26 @@ def _initialize_system():
     """
     # Step 1: Generate mock data if missing
     if not os.path.exists(os.path.join(Settings.DATA_DIR, "campaigns.csv")):
+        logger.info("[STARTUP] Generating mock CSV data...")
         from database.data.generate_mock_data import MockDataGenerator
         generator = MockDataGenerator()
         generator.generate_all()
+    else:
+        logger.info("[STARTUP] Mock CSV data already exists. Skipping generation.")
 
     # Step 2: Initialize SQLite database if missing
     if not os.path.exists(Settings.DB_PATH):
+        logger.info("[STARTUP] Initializing SQLite database from CSVs...")
         init_database()
+    else:
+        logger.info("[STARTUP] SQLite database already exists at '%s'.", Settings.DB_PATH)
 
-    # Step 3: Build vector store knowledge base
+    # Step 3: Build vector store knowledge base (Steps 1-4 of RAG pipeline)
+    logger.info("[STARTUP] Building ChromaDB knowledge base (RAG Steps 1-4: Load → Chunk → Embed → Store)...")
     build_knowledge_base()
 
     # Step 4: Create agent
+    logger.info("[STARTUP] Creating CampaignAgent with LangGraph react agent...")
     return CampaignAgent()
 
 

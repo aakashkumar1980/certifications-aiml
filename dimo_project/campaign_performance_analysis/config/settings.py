@@ -73,6 +73,10 @@ class Settings:
     NUM_REDEMPTIONS = 300
     PERF_MONTHS = 6
 
+    # --- Chunking Settings ---
+    CHUNK_SIZE = 200
+    CHUNK_OVERLAP = 50
+
     # --- Agent Settings ---
     AGENT_MAX_ITERATIONS = 5
     RAG_DEFAULT_RESULTS = 3
