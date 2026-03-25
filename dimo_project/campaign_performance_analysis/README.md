@@ -118,8 +118,9 @@ Credit card companies run marketing campaigns — things like "5% cashback on gr
 **Our solution:** An AI chatbot that lets you ask these questions in plain English. You type your question, and the AI:
 1. Figures out what data you need
 2. Writes and runs the correct database query
-3. Looks up relevant business context
-4. Gives you a clear, human-readable answer
+3. Looks up campaign details from the knowledge base (what the campaign offers, who it targets)
+4. Uses its own business knowledge to interpret the numbers (ROI, trends, benchmarks)
+5. Gives you a clear, human-readable answer
 
 No SQL knowledge, no manual reports, no waiting for the analytics team.
 
@@ -143,7 +144,12 @@ That's it. No Docker, no cloud services, no database servers. Everything runs lo
 ```mermaid
 graph TB
     subgraph API["FastAPI REST API"]
-        Endpoints["POST /ask  •  POST /ask/sql  •  POST /ask/search<br/>GET /campaigns  •  GET /campaigns/:id/summary  •  GET /health"]
+        E1["POST /ask"]
+        E2["POST /ask/sql"]
+        E3["POST /ask/search"]
+        E4["GET /campaigns"]
+        E5["GET /campaigns/:id/summary"]
+        E6["GET /health"]
     end
 
     subgraph Agent["AI Agent (llm/agent.py)"]
@@ -155,7 +161,7 @@ graph TB
 
     subgraph RAG["RAG Pipeline (rag/)"]
         direction LR
-        Docs["Documents"] --> Chunker["Chunker"] --> VecStore["ChromaDB"]
+        Docs["Campaign<br/>Descriptions"] --> Chunker["Chunker"] --> VecStore["ChromaDB"]
     end
 
     subgraph Infra["Data Infrastructure"]
@@ -185,28 +191,29 @@ graph TB
 
 ### Part 1: One-Time Ingestion (Startup)
 
-At startup, domain knowledge is converted into searchable vectors. Here is exactly what happens to real data:
+At startup, **only company-specific data** is converted into searchable vectors. Generic business knowledge (ROI formulas, enrollment rate definitions, metric benchmarks) is NOT stored — the LLM already knows these.
 
 #### Step 1 — Load Documents
 
-Three types of documents are loaded from `rag/documents.py`:
+Campaign descriptions are loaded from `rag/documents.py`. These contain facts the LLM cannot know — campaign names, target segments, reward structures, partner merchants, budgets:
 
 ```
+CAMPAIGN DESCRIPTION (CMP-001):
+"Summer Cashback Bonanza: A cashback rewards campaign targeting premium
+ cardholders. Offers 5% cashback on grocery and gas station purchases.
+ Runs during peak summer spending season. Budget: $250,000."
+
 CAMPAIGN DESCRIPTION (CMP-003):
 "Spring Dining Deal: A dining rewards campaign targeting student cardholders.
  Offers 10% cashback at partner restaurants including Olive Garden and Starbucks.
  Designed to increase engagement among younger customers. Budget: $100,000."
 
-PERFORMANCE SUMMARY (CMP-001):
-"CMP-001 Performance Summary: The Summer Cashback Bonanza achieved a 12% enrollment
- rate with 142 enrollments from premium customers. Redemption rate was 68%, driven
- primarily by grocery purchases at Whole Foods and Costco. ROI came in at 185%..."
-
-BUSINESS GLOSSARY:
-"ROI (Return on Investment): Measures campaign profitability.
- Calculated as ((revenue - cost) / cost) * 100. For credit card campaigns,
- ROI above 100% is considered successful. Top campaigns achieve 150-250% ROI."
+... (5 campaigns total)
 ```
+
+**What is NOT stored here (and why):**
+- Business glossary (ROI, enrollment rate, etc.) → the LLM already knows these definitions
+- Performance summaries → the LLM should compute these from raw database data, not read pre-written ones
 
 #### Step 2 — Chunk Documents
 
@@ -253,7 +260,7 @@ Metadata: {type: "campaign_description", campaign_id: "CMP-003",
            chunk_index: 0, total_chunks: 2}
 ```
 
-Total: 17 documents → ~40 chunks → 40 vectors stored in ChromaDB.
+Total: 5 campaign descriptions → ~10 chunks → 10 vectors stored in ChromaDB.
 
 ---
 
@@ -263,11 +270,11 @@ At runtime, the AI Agent receives the user's question and decides which tool(s) 
 
 ---
 
-#### Case 1: Definition Only (Partial RAG + LLM Fallback)
+#### Case 1: Definition Only (Partial RAG + LLM)
 
 > **"What is enrollment and what are the different types of enrollment?"**
 
-The knowledge base has "Enrollment Rate" (a metric) but NOT a general definition of enrollment or its types. RAG finds partial matches; Claude fills the gaps from its trained knowledge.
+The vector DB only has campaign descriptions — no glossary, no definitions. RAG finds weak matches (campaign texts that mention "enrollment"). Claude provides the actual definition from its trained knowledge.
 
 ```
 USER QUESTION
@@ -275,10 +282,11 @@ USER QUESTION
 │
 ▼
 AGENT DECISION
-│  "This is a definition question → use rag_search_tool"
+│  "This is a definition question. I'll check the knowledge base for
+│   context, but I likely know the definition myself → use rag_search_tool"
 │
 ▼
-RAG SEARCH (partial match — knowledge base does NOT have a full answer)
+RAG SEARCH (weak matches — vector DB has campaign descriptions, not definitions)
 │
 │  ┌─ Step 6: Embed the Query ──────────────────────────────────────────┐
 │  │ "What is enrollment and what are the different types"               │
@@ -287,35 +295,40 @@ RAG SEARCH (partial match — knowledge base does NOT have a full answer)
 │  └─────────────────────────────────────────────────────────────────────┘
 │
 │  ┌─ Step 7: Semantic Search (cosine similarity) ──────────────────────┐
-│  │ Compare query vector against all 40 stored vectors...               │
+│  │ Compare query vector against all ~10 stored vectors...              │
 │  │                                                                     │
-│  │ Glossary "Enrollment Rate" chunk   → distance: 0.82  ✓ closest     │
-│  │ CMP-005 summary "163 new customers"→ distance: 0.95  ✓ 2nd        │
-│  │ CMP-003 summary "180 enrollments"  → distance: 0.98  ✓ 3rd        │
+│  │ CMP-005 desc "...Targets all segments         │
+│  │   to grow the cardholder base..."  → distance: 1.05  ✓ closest     │
+│  │ CMP-001 desc "...targeting premium             │
+│  │   cardholders..."                  → distance: 1.12  ✓ 2nd        │
+│  │ CMP-003 desc "...targeting student             │
+│  │   cardholders..."                  → distance: 1.15  ✓ 3rd        │
 │  │                                                                     │
-│  │ Note: distances are high (>0.8) = weak matches, not exact answers   │
+│  │ Note: ALL distances >1.0 = very weak matches. The vector DB        │
+│  │ simply does not have definitions — only campaign descriptions.      │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
 │  ┌─ Step 8: Retrieved Chunks (top 3) ─────────────────────────────────┐
-│  │ [Source 1] Type: business_glossary                                  │
-│  │ "Enrollment Rate: The percentage of users who enroll in a           │
-│  │  campaign after seeing it. Calculated as                            │
-│  │  (enrollments / impressions) * 100..."                              │
+│  │ [Source 1] Type: campaign_description | Campaign: CMP-005           │
+│  │ "Launch Cashback Offer: A new customer acquisition campaign         │
+│  │  offering flat 3% cashback on all purchases for the first 90 days.  │
+│  │  Targets all segments to grow the cardholder base."                 │
 │  │                                                                     │
-│  │ [Source 2] Type: performance_summary | Campaign: CMP-005            │
-│  │ "Launch Cashback Offer onboarded 163 new customers across           │
-│  │  all segments..."                                                   │
+│  │ [Source 2] Type: campaign_description | Campaign: CMP-001           │
+│  │ "Summer Cashback Bonanza: A cashback rewards campaign targeting     │
+│  │  premium cardholders..."                                            │
 │  │                                                                     │
-│  │ [Source 3] Type: performance_summary | Campaign: CMP-003            │
-│  │ "Spring Dining Deal was highly effective with students,             │
-│  │  achieving 180 enrollments through mobile channel..."               │
+│  │ [Source 3] Type: campaign_description | Campaign: CMP-003           │
+│  │ "Spring Dining Deal: A dining rewards campaign targeting student    │
+│  │  cardholders..."                                                    │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
 ▼
-AGENT SYNTHESIZES (LLM Fallback)
-│  RAG provided: "enrollment rate" metric + campaign enrollment numbers
-│  Claude adds from trained knowledge: general definition of enrollment
-│  + types (open, targeted, auto-enrollment) that are NOT in the vector DB
+AGENT SYNTHESIZES (LLM provides the definition from its own knowledge)
+│  RAG provided: campaign descriptions (weak matches, but some context
+│  about how campaigns target different segments)
+│  Claude provides: the actual definition of enrollment + types from
+│  its trained knowledge — this is NOT in the vector DB at all
 │
 ▼
 FINAL ANSWER
@@ -324,12 +337,11 @@ FINAL ANSWER
     - Open enrollment: anyone can sign up during a defined window
     - Targeted enrollment: only pre-selected customers are eligible
     - Auto-enrollment: customers are enrolled automatically
-    In our campaign data, enrollment rate is tracked as the percentage
-    of users who enroll after seeing a campaign (typically 5-15%).
-    For example, CMP-003 achieved 180 enrollments and CMP-005 had 163."
+    In our campaigns, different segments are targeted — for example,
+    CMP-005 targets all segments while CMP-001 targets premium only."
 ```
 
-**Key takeaway:** When the knowledge base has only partial information, Claude supplements with its own trained knowledge. The user gets a complete answer either way.
+**Key takeaway:** Generic business definitions belong in the LLM, not the vector DB. The LLM already knows what "enrollment" means. RAG is only useful for company-specific facts.
 
 ---
 
@@ -337,7 +349,7 @@ FINAL ANSWER
 
 > **"What is enrollment rate and which campaign has the highest enrollment?"**
 
-This is a compound question. The agent calls BOTH `rag_search_tool` (for the definition) AND `sql_query_tool` (for the data), then synthesizes both results.
+This is a compound question. The agent uses its own knowledge for the definition, calls `sql_query_tool` for the data, and optionally calls `rag_search_tool` for campaign context.
 
 ```
 USER QUESTION
@@ -346,31 +358,9 @@ USER QUESTION
 ▼
 AGENT DECISION
 │  "This has two parts:
-│   - Definition of enrollment rate → use rag_search_tool
-│   - Data about highest enrollment → use sql_query_tool"
-│
-▼
-RAG SEARCH (definition — strong match this time)
-│
-│  ┌─ Step 6: Embed the Query ──────────────────────────────────────────┐
-│  │ "enrollment rate definition"                                        │
-│  │     ↓ all-MiniLM-L6-v2 model                                       │
-│  │ Query Vector: [0.078, -0.142, 0.193, ..., 0.056]  (384 dims)       │
-│  └─────────────────────────────────────────────────────────────────────┘
-│
-│  ┌─ Step 7: Semantic Search ─────────────────────────────────────────┐
-│  │ Glossary "Enrollment Rate" chunk   → distance: 0.31  ✓ strong!    │
-│  │ Glossary "Cost Per Enrollment"     → distance: 0.72  ✓ 2nd       │
-│  │ CMP-001 summary "12% enrollment"   → distance: 0.85  ✓ 3rd       │
-│  └────────────────────────────────────────────────────────────────────┘
-│
-│  ┌─ Step 8: Retrieved Chunks ─────────────────────────────────────────┐
-│  │ [Source 1] Type: business_glossary                                  │
-│  │ "Enrollment Rate: The percentage of users who enroll in a campaign  │
-│  │  after seeing it. Calculated as (enrollments / impressions) * 100.  │
-│  │  A good enrollment rate for credit card campaigns is typically      │
-│  │  5-15%. Higher rates indicate strong campaign messaging."           │
-│  └─────────────────────────────────────────────────────────────────────┘
+│   - Definition of enrollment rate → I know this already (LLM knowledge)
+│   - Data about highest enrollment → use sql_query_tool
+│   - Campaign context → use rag_search_tool"
 │
 ▼
 SQL QUERY (data — which campaign has the most enrollments)
@@ -397,7 +387,27 @@ SQL QUERY (data — which campaign has the most enrollments)
 │  └─────────────────────────────────────────────────────────────────────┘
 │
 ▼
-AGENT SYNTHESIZES (combines RAG definition + SQL data)
+RAG SEARCH (campaign context — what is "Spring Dining Deal"?)
+│
+│  ┌─ Steps 6-8: Semantic Search ──────────────────────────────────────┐
+│  │ Query: "Spring Dining Deal campaign"                               │
+│  │                                                                    │
+│  │ CMP-003 desc "Spring Dining Deal: A dining  │
+│  │   rewards campaign targeting student         │
+│  │   cardholders..."                → distance: 0.25  ✓ strong!      │
+│  └────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Retrieved: Campaign Description ─────────────────────────────────┐
+│  │ "Spring Dining Deal: A dining rewards campaign targeting student   │
+│  │  cardholders. Offers 10% cashback at partner restaurants including │
+│  │  Olive Garden and Starbucks. Budget: $100,000."                    │
+│  └────────────────────────────────────────────────────────────────────┘
+│
+▼
+AGENT SYNTHESIZES
+│  LLM knowledge: definition of enrollment rate
+│  SQL data: which campaigns have the most enrollments
+│  RAG context: what those campaigns actually are (target, rewards, budget)
 │
 ▼
 FINAL ANSWER
@@ -406,11 +416,13 @@ FINAL ANSWER
     A good rate for credit card campaigns is typically 5-15%.
 
     The Spring Dining Deal (CMP-003) has the highest enrollment with
-    180 sign-ups, followed by Launch Cashback Offer (CMP-005) with
-    163 and Summer Cashback Bonanza (CMP-001) with 142."
+    180 sign-ups — this is a dining rewards campaign targeting students
+    with 10% cashback at Olive Garden and Starbucks on a $100K budget.
+    Followed by Launch Cashback Offer (CMP-005) with 163 and Summer
+    Cashback Bonanza (CMP-001) with 142."
 ```
 
-**Key takeaway:** The agent can call multiple tools on a single question and merge the results — RAG provides the definition, SQL provides the data, and Claude weaves them into one coherent answer.
+**Key takeaway:** Each source provides what it's best at — LLM knows generic definitions, SQL has the numbers, RAG has company-specific campaign details. Claude weaves all three into one coherent answer.
 
 ---
 
@@ -418,7 +430,7 @@ FINAL ANSWER
 
 > **"Give me a performance summary for CMP-003"**
 
-The agent calls `performance_summary_tool`, which internally runs 3 SQL queries + 1 RAG search, assembles everything into an augmented prompt, and has Claude write a narrative report.
+The agent calls `performance_summary_tool`, which fetches raw data from SQL, campaign context from RAG, and then Claude **intelligently computes** metrics and writes the narrative.
 
 ```
 USER QUESTION
@@ -429,81 +441,85 @@ AGENT DECISION
 │  "This is a report request → use performance_summary_tool"
 │
 ▼
-PERFORMANCE SUMMARY TOOL (hybrid — SQL + RAG + LLM all in one tool)
+PERFORMANCE SUMMARY TOOL
 │
-│  ┌─ SQL Query 1: Monthly performance metrics ─────────────────────────┐
+│  ┌─ SQL Query 1: Monthly performance metrics (RAW DATA) ─────────────┐
 │  │ SELECT cp.*, c.campaign_name, c.campaign_type, c.budget_allocated   │
 │  │ FROM campaign_performance cp JOIN campaigns c ...                    │
 │  │ WHERE cp.campaign_id = 'CMP-003' ORDER BY cp.month                  │
 │  │                                                                     │
-│  │ Result:                                                             │
+│  │ Result (raw numbers — no interpretation yet):                       │
 │  │  [{month: "2024-03", enrollments: 45, redemptions: 33, roi: 185},  │
 │  │   {month: "2024-04", enrollments: 72, redemptions: 55, roi: 210},  │
 │  │   {month: "2024-05", enrollments: 63, redemptions: 48, roi: 225}]  │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ SQL Query 2: Total enrollments ───────────────────────────────────┐
+│  ┌─ SQL Query 2: Total enrollments (RAW DATA) ───────────────────────┐
 │  │ SELECT COUNT(*) as total_enrollments FROM enrollments               │
 │  │ WHERE campaign_id = 'CMP-003'                                       │
 │  │                                                                     │
 │  │ Result: [{total_enrollments: 180}]                                  │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ SQL Query 3: Total redemptions + amount ──────────────────────────┐
+│  ┌─ SQL Query 3: Total redemptions + amount (RAW DATA) ──────────────┐
 │  │ SELECT COUNT(*) as total_redemptions, SUM(redemption_amount)        │
 │  │ FROM redemptions WHERE campaign_id = 'CMP-003'                      │
 │  │                                                                     │
 │  │ Result: [{total_redemptions: 136, total_amount: 8420.50}]           │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ RAG Search: Qualitative context (Steps 6-8) ─────────────────────┐
-│  │ Query: "performance summary for CMP-003"                            │
+│  ┌─ RAG Search: Campaign Description (COMPANY-SPECIFIC CONTEXT) ─────┐
+│  │ Query: "campaign CMP-003 description"                               │
 │  │                                                                     │
-│  │ Retrieved:                                                          │
-│  │   "CMP-003 Performance Summary: Spring Dining Deal was highly       │
-│  │    effective with students, achieving 180 enrollments through        │
-│  │    mobile channel (72% of total). Redemption rate was 74% —         │
-│  │    highest across all campaigns. Starbucks drove 45% of             │
-│  │    redemptions. ROI was 210% on a modest budget."                   │
+│  │ Retrieved (what this campaign is about — LLM can't know this):     │
+│  │   "Spring Dining Deal: A dining rewards campaign targeting student  │
+│  │    cardholders. Offers 10% cashback at partner restaurants including│
+│  │    Olive Garden and Starbucks. Designed to increase engagement      │
+│  │    among younger customers. Budget: $100,000."                      │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ Step 9: Augmented Prompt (ALL data assembled) ────────────────────┐
-│  │ "Generate a concise business-friendly performance summary for       │
-│  │  campaign CMP-003.                                                  │
+│  ┌─ Step 9: Augmented Prompt ─────────────────────────────────────────┐
+│  │ "Generate a performance summary for campaign CMP-003.               │
 │  │                                                                     │
-│  │  Data:                                                              │
-│  │    performance_metrics: [3 monthly rows with enrollments,           │
-│  │                          redemptions, ROI]                          │
+│  │  Raw Data (from database):                                          │
+│  │    performance_metrics: [3 monthly rows]                            │
 │  │    enrollment_totals: [{total_enrollments: 180}]                    │
 │  │    redemption_totals: [{total_redemptions: 136,                     │
 │  │                         total_amount: 8420.50}]                     │
 │  │                                                                     │
-│  │  Additional Context: CMP-003 Performance Summary: Spring Dining...  │
+│  │  Campaign Description (from knowledge base):                        │
+│  │    Spring Dining Deal: targeting students, 10% cashback...          │
 │  │                                                                     │
-│  │  Format: 3-4 paragraphs covering enrollment trends, redemption      │
-│  │  patterns, ROI analysis, and a recommendation."                     │
+│  │  Instructions: Using YOUR knowledge of business metrics (ROI,       │
+│  │  enrollment rate, redemption rate, cost-per-enrollment), analyze    │
+│  │  the raw data and write a 3-4 paragraph report. Calculate derived  │
+│  │  metrics yourself from the raw numbers."                            │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  Steps 10-11: Claude generates the narrative from all the above data
+│  Steps 10-11: Claude COMPUTES metrics and generates the narrative
+│  - Redemption rate = 136/180 = 75.6% (Claude calculates this)
+│  - Cost per enrollment = $100,000/180 = $556 (Claude calculates this)
+│  - Trend analysis: enrollment peaked in April (Claude observes this)
 │
 ▼
 FINAL ANSWER
    "The Spring Dining Deal (CMP-003) demonstrated strong performance,
     particularly among student cardholders. With 180 total enrollments
-    and a 74% redemption rate — the highest across all campaigns —
-    the campaign exceeded expectations on every metric.
+    and a redemption rate of 75.6% (136 out of 180), the campaign
+    exceeded typical industry benchmarks of 40-70%.
 
-    Mobile was the dominant enrollment channel at 72%. Starbucks drove
-    45% of all redemptions, with total redemption value reaching $8,420.
     Monthly trends show enrollment peaking in April (72) before settling
     to 63 in May, while ROI climbed steadily from 185% to 225%.
+    Total redemption value reached $8,420.50, averaging $61.92 per
+    redemption.
 
-    On a modest $100,000 budget, the campaign achieved an impressive
-    210% average ROI. Recommendation: expand dining partnerships and
-    increase budget allocation for the student segment next quarter."
+    On a modest $100,000 budget, cost-per-enrollment was $556, and
+    the campaign achieved an impressive average ROI of 207%.
+    Recommendation: expand dining partnerships with similar student-
+    focused merchants and increase budget allocation next quarter."
 ```
 
-**Key takeaway:** The most complex flow. One tool internally orchestrates 3 SQL queries + 1 RAG search + 1 LLM synthesis — the user just asks a simple question and gets a complete narrative report.
+**Key takeaway:** The vector DB provides only what the LLM can't know (campaign description). SQL provides raw numbers. The LLM does all the intelligent work — calculating derived metrics, interpreting trends, comparing against benchmarks, and writing the narrative. No pre-written summaries needed.
 
 ---
 
@@ -523,7 +539,7 @@ campaign_performance_analysis/
 │
 ├── rag/                                     # CATEGORY 1: RAG Pipeline (Knowledge Retrieval)
 │   ├── __init__.py                          #   Public API re-exports
-│   ├── documents.py                         #   Step 1: Document sources
+│   ├── documents.py                         #   Step 1: Campaign descriptions (company-specific only)
 │   ├── chunking.py                          #   Step 2: Text splitting
 │   └── vector_store.py                      #   Steps 3-4, 6-8: Embed, Store, Search
 │

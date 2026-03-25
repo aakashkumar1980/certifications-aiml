@@ -28,19 +28,22 @@ def rag_search_tool(query: str) -> str:
     """
     Search the campaign knowledge base for relevant context.
 
-    Performs a semantic similarity search over campaign descriptions,
-    performance summaries, and business glossary definitions stored
-    in ChromaDB. Returns the top-3 most relevant documents.
+    Performs a semantic similarity search over campaign descriptions
+    stored in ChromaDB. Returns the top-3 most relevant documents.
+    Campaign descriptions contain company-specific information: campaign
+    names, target segments, reward structures, partner merchants, budgets.
 
-    Use this tool when the user asks about campaign strategy, business
-    definitions, or needs qualitative context beyond raw data.
+    Use this tool when the user asks about what a specific campaign offers,
+    which campaigns target a certain segment, or needs campaign context.
+    For generic business definitions (ROI, enrollment rate, etc.), you
+    already know these — no need to search.
 
     Args:
         query: Natural language search query.
 
     Returns:
-        Formatted string with up to 3 relevant knowledge base documents,
-        each annotated with its type and campaign ID (if applicable).
+        Formatted string with up to 3 relevant campaign descriptions,
+        each annotated with its campaign ID.
     """
     logger.info("=" * 80)
     logger.info("[RAG TOOL] Received search query: \"%s\"", query)

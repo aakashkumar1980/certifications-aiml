@@ -16,7 +16,7 @@ import chromadb
 from chromadb.utils import embedding_functions
 
 from config.settings import Settings
-from rag.documents import get_campaign_descriptions, get_performance_summaries, get_business_glossary
+from rag.documents import get_campaign_descriptions
 from rag.chunking import create_text_splitter, chunk_document
 
 logger = logging.getLogger("rag_pipeline")
@@ -72,8 +72,11 @@ class CampaignKnowledgeStore:
         splitter = create_text_splitter()
 
         # --- STEP 1: Loading Documents ---
+        # Only company-specific data goes into the vector DB.
+        # Generic knowledge (business glossary, metric definitions) is left
+        # to the LLM, which already knows these from its training data.
         logger.info("=" * 80)
-        logger.info("[STEP 1] LOADING DOCUMENTS: Gathering campaign descriptions, performance summaries, and business glossary...")
+        logger.info("[STEP 1] LOADING DOCUMENTS: Gathering campaign descriptions (company-specific data only)...")
 
         descriptions = get_campaign_descriptions()
         logger.info("[STEP 1] Loaded %d campaign descriptions", len(descriptions))
@@ -81,28 +84,6 @@ class CampaignKnowledgeStore:
             total_original_docs += 1
             texts, metas, ids = chunk_document(
                 desc, f"desc_{cid}", {"type": "campaign_description", "campaign_id": cid}, splitter
-            )
-            all_texts.extend(texts)
-            all_metadatas.extend(metas)
-            all_ids.extend(ids)
-
-        summaries = get_performance_summaries()
-        logger.info("[STEP 1] Loaded %d performance summaries", len(summaries))
-        for cid, summary in summaries:
-            total_original_docs += 1
-            texts, metas, ids = chunk_document(
-                summary, f"perf_{cid}", {"type": "performance_summary", "campaign_id": cid}, splitter
-            )
-            all_texts.extend(texts)
-            all_metadatas.extend(metas)
-            all_ids.extend(ids)
-
-        glossary = get_business_glossary()
-        logger.info("[STEP 1] Loaded %d business glossary entries", len(glossary))
-        for i, definition in enumerate(glossary):
-            total_original_docs += 1
-            texts, metas, ids = chunk_document(
-                definition, f"glossary_{i}", {"type": "business_glossary"}, splitter
             )
             all_texts.extend(texts)
             all_metadatas.extend(metas)
