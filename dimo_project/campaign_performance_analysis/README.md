@@ -259,26 +259,122 @@ Total: 17 documents → ~40 chunks → 40 vectors stored in ChromaDB.
 
 ### Part 2: Runtime Query — Case-by-Case Data Flows
 
-At runtime, the AI Agent receives the user's question and decides which tool(s) to call. Here are the different cases:
+At runtime, the AI Agent receives the user's question and decides which tool(s) to call. Here are three cases, from simplest to most complex:
 
 ---
 
-#### Case 1: Data Question → `sql_query_tool`
+#### Case 1: Definition Only (Partial RAG + LLM Fallback)
 
-> **"Which campaign has the highest enrollment?"**
+> **"What is enrollment and what are the different types of enrollment?"**
 
-The agent recognizes this needs database data and calls `sql_query_tool`.
+The knowledge base has "Enrollment Rate" (a metric) but NOT a general definition of enrollment or its types. RAG finds partial matches; Claude fills the gaps from its trained knowledge.
 
 ```
 USER QUESTION
-│  "Which campaign has the highest enrollment?"
+│  "What is enrollment and what are the different types of enrollment?"
 │
 ▼
 AGENT DECISION
-│  "This is a data question → use sql_query_tool"
+│  "This is a definition question → use rag_search_tool"
 │
 ▼
-SQL QUERY TOOL
+RAG SEARCH (partial match — knowledge base does NOT have a full answer)
+│
+│  ┌─ Step 6: Embed the Query ──────────────────────────────────────────┐
+│  │ "What is enrollment and what are the different types"               │
+│  │     ↓ all-MiniLM-L6-v2 model                                       │
+│  │ Query Vector: [-0.033, 0.215, 0.087, ..., 0.142]  (384 dims)       │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 7: Semantic Search (cosine similarity) ──────────────────────┐
+│  │ Compare query vector against all 40 stored vectors...               │
+│  │                                                                     │
+│  │ Glossary "Enrollment Rate" chunk   → distance: 0.82  ✓ closest     │
+│  │ CMP-005 summary "163 new customers"→ distance: 0.95  ✓ 2nd        │
+│  │ CMP-003 summary "180 enrollments"  → distance: 0.98  ✓ 3rd        │
+│  │                                                                     │
+│  │ Note: distances are high (>0.8) = weak matches, not exact answers   │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 8: Retrieved Chunks (top 3) ─────────────────────────────────┐
+│  │ [Source 1] Type: business_glossary                                  │
+│  │ "Enrollment Rate: The percentage of users who enroll in a           │
+│  │  campaign after seeing it. Calculated as                            │
+│  │  (enrollments / impressions) * 100..."                              │
+│  │                                                                     │
+│  │ [Source 2] Type: performance_summary | Campaign: CMP-005            │
+│  │ "Launch Cashback Offer onboarded 163 new customers across           │
+│  │  all segments..."                                                   │
+│  │                                                                     │
+│  │ [Source 3] Type: performance_summary | Campaign: CMP-003            │
+│  │ "Spring Dining Deal was highly effective with students,             │
+│  │  achieving 180 enrollments through mobile channel..."               │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+▼
+AGENT SYNTHESIZES (LLM Fallback)
+│  RAG provided: "enrollment rate" metric + campaign enrollment numbers
+│  Claude adds from trained knowledge: general definition of enrollment
+│  + types (open, targeted, auto-enrollment) that are NOT in the vector DB
+│
+▼
+FINAL ANSWER
+   "Enrollment refers to the process of signing up or registering for a
+    program or campaign. Types include:
+    - Open enrollment: anyone can sign up during a defined window
+    - Targeted enrollment: only pre-selected customers are eligible
+    - Auto-enrollment: customers are enrolled automatically
+    In our campaign data, enrollment rate is tracked as the percentage
+    of users who enroll after seeing a campaign (typically 5-15%).
+    For example, CMP-003 achieved 180 enrollments and CMP-005 had 163."
+```
+
+**Key takeaway:** When the knowledge base has only partial information, Claude supplements with its own trained knowledge. The user gets a complete answer either way.
+
+---
+
+#### Case 2: Simple Data Question (RAG + SQL + LLM)
+
+> **"What is enrollment rate and which campaign has the highest enrollment?"**
+
+This is a compound question. The agent calls BOTH `rag_search_tool` (for the definition) AND `sql_query_tool` (for the data), then synthesizes both results.
+
+```
+USER QUESTION
+│  "What is enrollment rate and which campaign has the highest enrollment?"
+│
+▼
+AGENT DECISION
+│  "This has two parts:
+│   - Definition of enrollment rate → use rag_search_tool
+│   - Data about highest enrollment → use sql_query_tool"
+│
+▼
+RAG SEARCH (definition — strong match this time)
+│
+│  ┌─ Step 6: Embed the Query ──────────────────────────────────────────┐
+│  │ "enrollment rate definition"                                        │
+│  │     ↓ all-MiniLM-L6-v2 model                                       │
+│  │ Query Vector: [0.078, -0.142, 0.193, ..., 0.056]  (384 dims)       │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 7: Semantic Search ─────────────────────────────────────────┐
+│  │ Glossary "Enrollment Rate" chunk   → distance: 0.31  ✓ strong!    │
+│  │ Glossary "Cost Per Enrollment"     → distance: 0.72  ✓ 2nd       │
+│  │ CMP-001 summary "12% enrollment"   → distance: 0.85  ✓ 3rd       │
+│  └────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ Step 8: Retrieved Chunks ─────────────────────────────────────────┐
+│  │ [Source 1] Type: business_glossary                                  │
+│  │ "Enrollment Rate: The percentage of users who enroll in a campaign  │
+│  │  after seeing it. Calculated as (enrollments / impressions) * 100.  │
+│  │  A good enrollment rate for credit card campaigns is typically      │
+│  │  5-15%. Higher rates indicate strong campaign messaging."           │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+▼
+SQL QUERY (data — which campaign has the most enrollments)
+│
 │  ┌─ Step 9: Augmented Prompt ──────────────────────────────────────────┐
 │  │ "You are a SQL expert. Given this database schema:                  │
 │  │  CREATE TABLE campaigns (campaign_id, campaign_name, ...)           │
@@ -301,81 +397,28 @@ SQL QUERY TOOL
 │  └─────────────────────────────────────────────────────────────────────┘
 │
 ▼
-AGENT SYNTHESIZES
-│  Claude reads the SQL results and writes a friendly answer
+AGENT SYNTHESIZES (combines RAG definition + SQL data)
 │
 ▼
 FINAL ANSWER
-   "The Spring Dining Deal (CMP-003) has the highest enrollment with
+   "Enrollment rate is the percentage of users who enroll in a campaign
+    after seeing it, calculated as (enrollments / impressions) × 100.
+    A good rate for credit card campaigns is typically 5-15%.
+
+    The Spring Dining Deal (CMP-003) has the highest enrollment with
     180 sign-ups, followed by Launch Cashback Offer (CMP-005) with
     163 and Summer Cashback Bonanza (CMP-001) with 142."
 ```
 
----
-
-#### Case 2: Context/Definition Question → `rag_search_tool`
-
-> **"What does redemption rate mean?"**
-
-The agent recognizes this is a definition question and calls `rag_search_tool`.
-
-```
-USER QUESTION
-│  "What does redemption rate mean?"
-│
-▼
-AGENT DECISION
-│  "This is a definition question → use rag_search_tool"
-│
-▼
-RAG SEARCH TOOL
-│  ┌─ Step 6: Embed the Query ──────────────────────────────────────────┐
-│  │ "What does redemption rate mean?"                                   │
-│  │     ↓ same all-MiniLM-L6-v2 model                                  │
-│  │ Query Vector: [-0.033, 0.215, 0.087, ..., 0.142]  (384 dims)       │
-│  └─────────────────────────────────────────────────────────────────────┘
-│
-│  ┌─ Step 7: Semantic Search (cosine similarity) ──────────────────────┐
-│  │ Compare query vector against all 40 stored vectors...               │
-│  │                                                                     │
-│  │ Glossary "Redemption Rate" chunk   → distance: 0.4212  ✓ closest   │
-│  │ CMP-001 summary "Redemption 68%"   → distance: 0.8934  ✓ 2nd      │
-│  │ CMP-003 summary "Redemption 74%"   → distance: 0.9187  ✓ 3rd      │
-│  │ Glossary "Enrollment Rate" chunk   → distance: 1.1042  ✗ too far   │
-│  └─────────────────────────────────────────────────────────────────────┘
-│
-│  ┌─ Step 8: Retrieved Chunks (top 3) ─────────────────────────────────┐
-│  │ [Source 1] Type: business_glossary                                  │
-│  │ "Redemption Rate: The percentage of enrolled customers who          │
-│  │  actually redeem their reward. Calculated as                        │
-│  │  (redemptions / enrollments) * 100. Industry benchmark is 40-70%." │
-│  │                                                                     │
-│  │ [Source 2] Type: performance_summary | Campaign: CMP-001            │
-│  │ "Redemption rate was 68%, driven primarily by grocery purchases..." │
-│  │                                                                     │
-│  │ [Source 3] Type: performance_summary | Campaign: CMP-003            │
-│  │ "Redemption rate was 74% — highest across all campaigns..."         │
-│  └─────────────────────────────────────────────────────────────────────┘
-│
-▼
-AGENT SYNTHESIZES
-│  Claude combines the glossary definition + real examples
-│
-▼
-FINAL ANSWER
-   "Redemption rate is the percentage of enrolled customers who actually
-    redeem their reward, calculated as (redemptions / enrollments) × 100.
-    The industry benchmark is 40-70%. In our campaigns, CMP-003 leads
-    at 74% and CMP-001 is at 68%."
-```
+**Key takeaway:** The agent can call multiple tools on a single question and merge the results — RAG provides the definition, SQL provides the data, and Claude weaves them into one coherent answer.
 
 ---
 
-#### Case 3: Report Request → `performance_summary_tool`
+#### Case 3: Complex Report Request (RAG + SQL + LLM)
 
 > **"Give me a performance summary for CMP-003"**
 
-The agent calls `performance_summary_tool`, which internally uses BOTH SQL and RAG.
+The agent calls `performance_summary_tool`, which internally runs 3 SQL queries + 1 RAG search, assembles everything into an augmented prompt, and has Claude write a narrative report.
 
 ```
 USER QUESTION
@@ -386,37 +429,54 @@ AGENT DECISION
 │  "This is a report request → use performance_summary_tool"
 │
 ▼
-PERFORMANCE SUMMARY TOOL (hybrid — uses SQL + RAG + LLM internally)
+PERFORMANCE SUMMARY TOOL (hybrid — SQL + RAG + LLM all in one tool)
 │
-│  ┌─ SQL Queries ───────────────────────────────────────────────────────┐
-│  │ Query 1: SELECT cp.*, c.campaign_name, c.campaign_type ...          │
-│  │          FROM campaign_performance cp JOIN campaigns c ...           │
-│  │          WHERE cp.campaign_id = 'CMP-003' ORDER BY cp.month         │
-│  │ Result:  [{month: "2024-03", enrollments: 45, redemptions: 33, ...},│
-│  │           {month: "2024-04", enrollments: 72, redemptions: 55, ...},│
-│  │           {month: "2024-05", enrollments: 63, redemptions: 48, ...}]│
+│  ┌─ SQL Query 1: Monthly performance metrics ─────────────────────────┐
+│  │ SELECT cp.*, c.campaign_name, c.campaign_type, c.budget_allocated   │
+│  │ FROM campaign_performance cp JOIN campaigns c ...                    │
+│  │ WHERE cp.campaign_id = 'CMP-003' ORDER BY cp.month                  │
 │  │                                                                     │
-│  │ Query 2: SELECT COUNT(*) as total_enrollments FROM enrollments ...   │
-│  │ Result:  [{total_enrollments: 180}]                                  │
-│  │                                                                     │
-│  │ Query 3: SELECT COUNT(*), SUM(redemption_amount) FROM redemptions...│
-│  │ Result:  [{total_redemptions: 136, total_amount: 8420.50}]           │
+│  │ Result:                                                             │
+│  │  [{month: "2024-03", enrollments: 45, redemptions: 33, roi: 185},  │
+│  │   {month: "2024-04", enrollments: 72, redemptions: 55, roi: 210},  │
+│  │   {month: "2024-05", enrollments: 63, redemptions: 48, roi: 225}]  │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ RAG Search (Steps 6-8) ───────────────────────────────────────────┐
+│  ┌─ SQL Query 2: Total enrollments ───────────────────────────────────┐
+│  │ SELECT COUNT(*) as total_enrollments FROM enrollments               │
+│  │ WHERE campaign_id = 'CMP-003'                                       │
+│  │                                                                     │
+│  │ Result: [{total_enrollments: 180}]                                  │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ SQL Query 3: Total redemptions + amount ──────────────────────────┐
+│  │ SELECT COUNT(*) as total_redemptions, SUM(redemption_amount)        │
+│  │ FROM redemptions WHERE campaign_id = 'CMP-003'                      │
+│  │                                                                     │
+│  │ Result: [{total_redemptions: 136, total_amount: 8420.50}]           │
+│  └─────────────────────────────────────────────────────────────────────┘
+│
+│  ┌─ RAG Search: Qualitative context (Steps 6-8) ─────────────────────┐
 │  │ Query: "performance summary for CMP-003"                            │
+│  │                                                                     │
 │  │ Retrieved:                                                          │
 │  │   "CMP-003 Performance Summary: Spring Dining Deal was highly       │
 │  │    effective with students, achieving 180 enrollments through        │
-│  │    mobile channel (72% of total). Redemption rate was 74%..."        │
+│  │    mobile channel (72% of total). Redemption rate was 74% —         │
+│  │    highest across all campaigns. Starbucks drove 45% of             │
+│  │    redemptions. ROI was 210% on a modest budget."                   │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ Step 9: Augmented Prompt (DB data + RAG context + instruction) ───┐
+│  ┌─ Step 9: Augmented Prompt (ALL data assembled) ────────────────────┐
 │  │ "Generate a concise business-friendly performance summary for       │
 │  │  campaign CMP-003.                                                  │
 │  │                                                                     │
-│  │  Data: {performance_metrics: [...], enrollment_totals: [...],        │
-│  │         redemption_totals: [...]}                                    │
+│  │  Data:                                                              │
+│  │    performance_metrics: [3 monthly rows with enrollments,           │
+│  │                          redemptions, ROI]                          │
+│  │    enrollment_totals: [{total_enrollments: 180}]                    │
+│  │    redemption_totals: [{total_redemptions: 136,                     │
+│  │                         total_amount: 8420.50}]                     │
 │  │                                                                     │
 │  │  Additional Context: CMP-003 Performance Summary: Spring Dining...  │
 │  │                                                                     │
@@ -424,66 +484,26 @@ PERFORMANCE SUMMARY TOOL (hybrid — uses SQL + RAG + LLM internally)
 │  │  patterns, ROI analysis, and a recommendation."                     │
 │  └─────────────────────────────────────────────────────────────────────┘
 │
-│  ┌─ Steps 10-11: Claude generates the narrative ──────────────────────┐
-│  │ (Claude reads ALL the data + context and writes a report)           │
-│  └─────────────────────────────────────────────────────────────────────┘
+│  Steps 10-11: Claude generates the narrative from all the above data
 │
 ▼
 FINAL ANSWER
    "The Spring Dining Deal (CMP-003) demonstrated strong performance,
     particularly among student cardholders. With 180 total enrollments
     and a 74% redemption rate — the highest across all campaigns —
-    the campaign exceeded expectations. Mobile was the dominant channel
-    at 72% of enrollments. Starbucks drove 45% of all redemptions.
+    the campaign exceeded expectations on every metric.
+
+    Mobile was the dominant enrollment channel at 72%. Starbucks drove
+    45% of all redemptions, with total redemption value reaching $8,420.
+    Monthly trends show enrollment peaking in April (72) before settling
+    to 63 in May, while ROI climbed steadily from 185% to 225%.
+
     On a modest $100,000 budget, the campaign achieved an impressive
-    210% ROI. Recommendation: expand dining partnerships and increase
-    budget allocation for the student segment."
+    210% average ROI. Recommendation: expand dining partnerships and
+    increase budget allocation for the student segment next quarter."
 ```
 
----
-
-#### Case 4: LLM Fallback — Question Not in Knowledge Base
-
-> **"What is enrollment and what are the different types of enrollment?"**
-
-The knowledge base has "Enrollment Rate" (a metric) but NOT a general definition of enrollment or its types.
-
-```
-USER QUESTION
-│  "What is enrollment and what are the different types of enrollment?"
-│
-▼
-AGENT DECISION
-│  "This seems like a definition question → use rag_search_tool"
-│
-▼
-RAG SEARCH TOOL
-│  ┌─ Steps 6-8: Semantic Search ───────────────────────────────────────┐
-│  │ Query: "What is enrollment and what are the different types"         │
-│  │                                                                     │
-│  │ Retrieved (partial matches — NOT exact answers):                    │
-│  │   [Source 1] Glossary: "Enrollment Rate: The percentage of users    │
-│  │    who enroll in a campaign after seeing it..."  (distance: 0.82)   │
-│  │   [Source 2] CMP-005 summary: "...onboarded 163 new customers..."  │
-│  │   [Source 3] CMP-003 summary: "...achieving 180 enrollments..."    │
-│  └─────────────────────────────────────────────────────────────────────┘
-│
-▼
-AGENT SYNTHESIZES (Claude fills in the gaps from trained knowledge)
-│  - RAG provided: enrollment rate definition + campaign enrollment data
-│  - Claude adds: general definition of enrollment + types (open, closed,
-│    rolling, etc.) from its own trained knowledge
-│
-▼
-FINAL ANSWER
-   "Enrollment refers to the process of signing up or registering for a
-    program or campaign. Types include:
-    - Open enrollment: anyone can sign up during a defined window
-    - Targeted enrollment: only pre-selected customers are eligible
-    - Auto-enrollment: customers are enrolled automatically
-    In our campaign data, enrollment rate is tracked as the percentage
-    of users who enroll after seeing a campaign (typically 5-15%)."
-```
+**Key takeaway:** The most complex flow. One tool internally orchestrates 3 SQL queries + 1 RAG search + 1 LLM synthesis — the user just asks a simple question and gets a complete narrative report.
 
 ---
 
@@ -607,14 +627,19 @@ curl http://localhost:8000/campaigns/CMP-003/summary
 
 ## Sample Questions
 
-- "Which campaign has the highest enrollment?"
-- "Compare cashback vs travel offer performance"
-- "What is the ROI trend for Q4?"
-- "Which merchant category drives the most redemptions?"
-- "Give me a performance summary for CMP-003"
-- "What does redemption rate mean?"
+**Case 1 — Definition only (Partial RAG + LLM Fallback):**
+- "What is enrollment and what are the different types?"
+- "What are the different campaign types in credit card marketing?"
+
+**Case 2 — Simple data question (RAG + SQL + LLM):**
+- "What is enrollment rate and which campaign has the highest enrollment?"
+- "What does redemption rate mean and how does CMP-003 compare to CMP-001?"
 - "Which state has the most enrollments?"
 - "What is the average cost per enrollment across all campaigns?"
+
+**Case 3 — Complex report request (RAG + SQL + LLM):**
+- "Give me a performance summary for CMP-003"
+- "Compare the Spring Dining Deal and Year-End Retail Special — which delivered better ROI?"
 
 ---
 
