@@ -1,5 +1,5 @@
 """
-Campaign Agent Module.
+Campaign Agent Module — LLM Intelligence (Category 2).
 
 Implements the LangGraph react agent that orchestrates tool calls
 and maintains multi-turn conversation history. The agent uses Claude
@@ -8,6 +8,12 @@ on the user's question, executes them, and synthesizes results.
 
 When no tool returns relevant data, Claude falls back to its trained
 knowledge to provide general definitions and context.
+
+RAG Pipeline Steps involved:
+    Step 5:  User Query — received and forwarded to agent
+    Step 9:  Contextually Augmented Prompt — agent assembles tool results + context
+    Step 10: Fed to LLM — agent sends augmented context to Claude for synthesis
+    Step 11: LLM Response — Claude generates final business-friendly answer
 """
 
 import logging
@@ -61,7 +67,11 @@ class CampaignAgent:
             self.chat_history.append(HumanMessage(content=question))
 
             # --- STEP 9-10: Agent reasoning loop ---
-            logger.info("[STEP 9-10] AGENT REASONING: Invoking LangGraph react agent loop...")
+            # The agent internally: (a) decides which tool to call, (b) calls it,
+            # (c) assembles the augmented prompt with tool results, (d) sends to Claude
+            logger.info("[STEP 9] AGENT REASONING: LangGraph react loop — selecting tools and building augmented prompt...")
+            logger.info("[STEP 10] FED TO LLM: Agent sends messages + tool results to '%s' for final synthesis...",
+                         SYSTEM_PROMPT[:50])
             result = self.agent.invoke({"messages": self.chat_history})
 
             messages = result.get("messages", [])
@@ -93,7 +103,7 @@ class CampaignAgent:
                         response["sources"].append(tool_output[:500])
 
             # --- STEP 11: LLM Response ---
-            logger.info("[STEP 11] LLM RESPONSE (final answer): \"%.300s...\"", answer)
+            logger.info("[STEP 11] LLM RESPONSE (final answer, %d chars): \"%.300s...\"", len(answer), answer)
             logger.info("[STEP 11] Metadata — SQL used: %s | RAG sources: %d",
                          response["sql_query"] is not None, len(response["sources"]))
             logger.info("=" * 80)

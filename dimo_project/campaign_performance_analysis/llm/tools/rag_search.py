@@ -1,8 +1,16 @@
 """
-RAG Search Tool.
+RAG Search Tool — LLM Intelligence (Category 2).
 
-Performs semantic similarity search over the ChromaDB knowledge base
-and returns the most relevant document chunks to the agent.
+Acts as the bridge between the agent (Category 2) and the RAG pipeline
+(Category 1). The tool itself lives in the LLM package because it is
+a tool the agent calls, but it delegates to ``rag.vector_store`` which
+handles Steps 6-8 of the RAG pipeline.
+
+RAG Pipeline Steps involved:
+    Step 6: Embedding Query       — (delegated to rag/vector_store.py)
+    Step 7: Semantic Search       — (delegated to rag/vector_store.py)
+    Step 8: Retrieve Closest Chunks — (delegated to rag/vector_store.py)
+    Step 9: Contextually Augmented Prompt — chunks formatted for agent
 """
 
 import logging
@@ -38,11 +46,14 @@ def rag_search_tool(query: str) -> str:
     logger.info("[RAG TOOL] Received search query: \"%s\"", query)
 
     try:
+        # Steps 6, 7, 8 are logged inside search_similar() (Category 1: RAG Pipeline)
         results = search_similar(query, n_results=Settings.RAG_DEFAULT_RESULTS)
         if not results:
             logger.warning("[RAG TOOL] No relevant documents found.")
             return "No relevant documents found in the knowledge base."
 
+        # --- STEP 9: Contextually Augmented Prompt (partial) ---
+        # Format the retrieved chunks so the agent can include them in the augmented prompt
         formatted_parts = []
         for i, r in enumerate(results, 1):
             doc_type = r["metadata"].get("type", "unknown")
@@ -52,7 +63,8 @@ def rag_search_tool(query: str) -> str:
             )
 
         output = "\n\n---\n\n".join(formatted_parts)
-        logger.info("[RAG TOOL] Returning %d source chunks to agent", len(results))
+        logger.info("[STEP 9] CONTEXTUALLY AUGMENTED PROMPT (partial): %d RAG chunks formatted for agent consumption",
+                     len(results))
         logger.info("=" * 80)
         return output
 
