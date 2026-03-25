@@ -1,10 +1,15 @@
 """
 Performance Summary Tool.
 
-Combines structured database metrics with RAG context to produce
-a narrative performance report for a specific campaign. This is a
-hybrid tool that uses both SQL queries and semantic search, then
-feeds everything to Claude for synthesis.
+Generates a narrative performance report for a specific campaign by:
+1. Fetching raw data from SQL (monthly metrics, enrollment/redemption totals)
+2. Fetching campaign description from RAG (what the campaign is about)
+3. Feeding raw data + campaign context to Claude, which uses its own
+   business knowledge to interpret the numbers and write the report.
+
+The LLM does the intelligent work (metric interpretation, trend analysis,
+recommendations). RAG provides only company-specific context (campaign
+name, target segment, partners, budget) that the LLM cannot know.
 """
 
 import json
@@ -25,9 +30,9 @@ def performance_summary_tool(campaign_id: str) -> str:
     """
     Generate a narrative performance summary for a specific campaign.
 
-    Combines structured database metrics (monthly performance, enrollment
-    totals, redemption amounts) with qualitative RAG context to produce
-    a business-friendly performance report using Claude.
+    Fetches raw data from the database (monthly metrics, enrollment totals,
+    redemption amounts) and campaign description from RAG (what the campaign
+    is about), then lets Claude interpret the numbers and write the report.
 
     Use this tool when the user asks for a detailed summary or report
     for a specific campaign. Provide the campaign_id (e.g., 'CMP-001').
@@ -64,9 +69,9 @@ def performance_summary_tool(campaign_id: str) -> str:
         logger.info("[PERF TOOL] Executing redemption SQL: %s", redeem_sql)
         redeem_data = execute_query(redeem_sql)
 
-        # Supplement with RAG context for qualitative insights (logs steps 6-8 internally)
-        logger.info("[PERF TOOL] Searching RAG for qualitative context...")
-        rag_context = search_similar(f"performance summary for {campaign_id}", n_results=2)
+        # Fetch campaign description from RAG (company-specific context the LLM can't know)
+        logger.info("[PERF TOOL] Searching RAG for campaign description...")
+        rag_context = search_similar(f"campaign {campaign_id} description", n_results=2)
         rag_text = "\n".join([r["content"] for r in rag_context])
 
         if isinstance(perf_data, str):
@@ -81,12 +86,19 @@ def performance_summary_tool(campaign_id: str) -> str:
         }, indent=2, default=str)
 
         # --- STEP 9: Contextually Augmented Prompt ---
+        # Raw data + campaign context go to Claude. Claude uses its own business
+        # knowledge (ROI formulas, benchmark interpretation, trend analysis) to
+        # intelligently compute insights and write the narrative.
         summary_prompt = (
             f"Generate a concise business-friendly performance summary for campaign {campaign_id}.\n\n"
-            f"Data:\n{data_payload}\n\n"
-            f"Additional Context:\n{rag_text}\n\n"
-            "Format: 3-4 paragraphs covering enrollment trends, redemption patterns, "
-            "ROI analysis, and a recommendation. Use specific numbers from the data."
+            f"Raw Data (from database):\n{data_payload}\n\n"
+            f"Campaign Description (from knowledge base):\n{rag_text}\n\n"
+            "Instructions: Using your knowledge of business metrics (ROI, enrollment rate, "
+            "redemption rate, cost-per-enrollment, etc.), analyze the raw data above and "
+            "write a 3-4 paragraph report covering enrollment trends, redemption patterns, "
+            "ROI analysis, and a recommendation. Use specific numbers from the data. "
+            "Calculate derived metrics (like redemption rate, cost-per-enrollment) yourself "
+            "from the raw numbers."
         )
         logger.info("[STEP 9] CONTEXTUALLY AUGMENTED PROMPT constructed:")
         logger.info("[STEP 9]   DB results: %d performance rows, enrollment totals, redemption totals", len(perf_data))

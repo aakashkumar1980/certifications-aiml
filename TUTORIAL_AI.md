@@ -159,7 +159,7 @@ sequenceDiagram
 | 10 | Fed to LLM | LLM | Send the augmented prompt to the LLM |
 | 11 | LLM Response | LLM | LLM generates a natural language answer grounded in the retrieved data |
 
-> **In our example project:** Steps 1-4 happen at startup — campaign descriptions, performance summaries, and a business glossary are chunked and stored in ChromaDB. Steps 5-11 happen on every API request — the user's question triggers semantic search, SQL queries, and Claude synthesis.
+> **In our example project:** Steps 1-4 happen at startup — campaign descriptions (company-specific data only) are chunked and stored in ChromaDB. Generic knowledge like business glossary definitions and performance analysis are NOT stored — the LLM already knows these. Steps 5-11 happen on every API request — the user's question triggers semantic search, SQL queries, and Claude synthesis.
 
 ### Simple Analogy
 
@@ -309,7 +309,7 @@ def search_knowledge_base(query: str) -> str:
 
 The docstring is critical — it's what the LLM reads to decide whether to use this tool.
 
-> **In our example project:** Three tools are defined in `llm/tools/` — `sql_query_tool` (generates and runs SQL), `rag_search_tool` (searches ChromaDB), and `performance_summary_tool` (combines both for narrative reports).
+> **In our example project:** Three tools are defined in `llm/tools/` — `sql_query_tool` (generates and runs SQL), `rag_search_tool` (searches ChromaDB for campaign descriptions), and `performance_summary_tool` (fetches raw SQL data + campaign context from RAG, then Claude computes metrics and writes the report).
 
 ### Simple Analogy
 
@@ -338,13 +338,13 @@ User: "What is the definition of enrollment and what are its types?"
 
 Your vector database might have "Enrollment Rate: The percentage of users who enroll..." but NOT a general definition of enrollment or its types. In this case:
 
-1. **RAG search returns partial matches** — the glossary entry about "enrollment rate"
-2. **The LLM fills in the gaps** — Claude knows the general concept of enrollment from its training data
-3. **The answer blends both** — domain-specific context from RAG + general knowledge from the LLM
+1. **RAG search returns weak matches** — campaign descriptions that mention "enrollment" but don't define it
+2. **The LLM provides the definition** — Claude knows what enrollment means from its training data
+3. **The answer blends both** — company-specific context from RAG + general knowledge from the LLM
 
 This is a key advantage of the two-category architecture. Category 1 (RAG) provides what it can; Category 2 (LLM) supplements with its broader trained knowledge. The user gets a complete answer either way.
 
-> **In our example project:** The Postman collection includes a "Scenario 1: LLM Fallback" that demonstrates this — asking about enrollment types that aren't in the vector DB.
+> **In our example project:** The Postman collection Case 1 demonstrates this — asking about enrollment types. The vector DB only has campaign descriptions, so Claude provides the definition from its own trained knowledge.
 
 ---
 
