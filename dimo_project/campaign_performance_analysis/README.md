@@ -252,12 +252,17 @@ Chunk: "Spring Dining Deal: A dining rewards campaign targeting student
 
 Vector: [0.042, -0.118, 0.231, 0.067, ..., -0.089]   (384 numbers)
 
-        ↓ Stored in ChromaDB with metadata
+        ↓ Stored in ChromaDB as one entry
 
-ID:       "desc_CMP-003_chunk0"
-Vector:   [0.042, -0.118, 0.231, ...]
-Metadata: {type: "campaign_description", campaign_id: "CMP-003",
-           chunk_index: 0, total_chunks: 2}
+┌─────────────────────────────────────────────────────────────────────┐
+│ ID:       "desc_CMP-003_chunk0"                                     │
+│ Document: "Spring Dining Deal: A dining rewards campaign targeting  │
+│            student cardholders. Offers 10% cashback at partner      │
+│            restaurants including Olive Garden and Starbucks."       │
+│ Vector:   [0.042, -0.118, 0.231, 0.067, ..., -0.089]  (384 nums)  │
+│ Metadata: {type: "campaign_description", campaign_id: "CMP-003",   │
+│            chunk_index: 0, total_chunks: 2}                         │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
 Total: 5 campaign descriptions → ~10 chunks → 10 vectors stored in ChromaDB.
