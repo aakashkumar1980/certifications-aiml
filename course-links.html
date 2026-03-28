@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google Cloud ML Engineer Certification — Learning Path</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --surface: #1e293b;
+            --surface-hover: #273549;
+            --border: #334155;
+            --text: #e2e8f0;
+            --text-muted: #94a3b8;
+            --accent-1: #818cf8;
+            --accent-2: #38bdf8;
+            --accent-3: #34d399;
+            --accent-4: #fb923c;
+            --accent-5: #f472b6;
+            --link: #60a5fa;
+            --link-hover: #93c5fd;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 3rem 1.5rem 5rem;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+
+        header h1 {
+            font-size: 2.2rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, var(--accent-2), var(--accent-1), var(--accent-5));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 0.5rem;
+        }
+
+        header p {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+        }
+
+        .timeline {
+            position: relative;
+            padding-left: 2.5rem;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0.7rem;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(to bottom, var(--accent-1), var(--accent-2), var(--accent-3), var(--accent-4), var(--accent-5));
+            border-radius: 2px;
+        }
+
+        .phase {
+            position: relative;
+            margin-bottom: 2.5rem;
+        }
+
+        .phase-dot {
+            position: absolute;
+            left: -1.95rem;
+            top: 1.6rem;
+            width: 14px;
+            height: 14px;
+            border-radius: 50%;
+            border: 3px solid var(--bg);
+            z-index: 1;
+        }
+
+        .phase:nth-child(1) .phase-dot { background: var(--accent-1); box-shadow: 0 0 10px var(--accent-1); }
+        .phase:nth-child(2) .phase-dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
+        .phase:nth-child(3) .phase-dot { background: var(--accent-3); box-shadow: 0 0 10px var(--accent-3); }
+        .phase:nth-child(4) .phase-dot { background: var(--accent-4); box-shadow: 0 0 10px var(--accent-4); }
+        .phase:nth-child(5) .phase-dot { background: var(--accent-5); box-shadow: 0 0 10px var(--accent-5); }
+
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.8rem;
+            transition: transform 0.2s, border-color 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+            border-color: var(--text-muted);
+        }
+
+        .phase:nth-child(1) .card { border-top: 3px solid var(--accent-1); }
+        .phase:nth-child(2) .card { border-top: 3px solid var(--accent-2); }
+        .phase:nth-child(3) .card { border-top: 3px solid var(--accent-3); }
+        .phase:nth-child(4) .card { border-top: 3px solid var(--accent-4); }
+        .phase:nth-child(5) .card { border-top: 3px solid var(--accent-5); }
+
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 0.3rem;
+        }
+
+        .phase-label {
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            padding: 0.2rem 0.7rem;
+            border-radius: 20px;
+            display: inline-block;
+        }
+
+        .phase:nth-child(1) .phase-label { color: var(--accent-1); background: rgba(129,140,248,0.12); }
+        .phase:nth-child(2) .phase-label { color: var(--accent-2); background: rgba(56,189,248,0.12); }
+        .phase:nth-child(3) .phase-label { color: var(--accent-3); background: rgba(52,211,153,0.12); }
+        .phase:nth-child(4) .phase-label { color: var(--accent-4); background: rgba(251,146,60,0.12); }
+        .phase:nth-child(5) .phase-label { color: var(--accent-5); background: rgba(244,114,182,0.12); }
+
+        .duration {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            white-space: nowrap;
+        }
+
+        .card h2 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 0.6rem 0 0.4rem;
+        }
+
+        .card h2 a {
+            color: var(--text);
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        .card h2 a:hover { color: var(--link-hover); }
+
+        .provider {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 1rem;
+        }
+
+        .details {
+            list-style: none;
+            padding: 0;
+        }
+
+        .details li {
+            position: relative;
+            padding: 0.3rem 0 0.3rem 1.3rem;
+            color: var(--text-muted);
+            font-size: 0.92rem;
+        }
+
+        .details li::before {
+            content: '›';
+            position: absolute;
+            left: 0.2rem;
+            color: var(--text-muted);
+            font-weight: 700;
+        }
+
+        .sub-courses {
+            list-style: none;
+            padding: 0.3rem 0 0 0.5rem;
+        }
+
+        .sub-courses li {
+            padding: 0.25rem 0 0.25rem 1rem;
+            position: relative;
+            font-size: 0.9rem;
+        }
+
+        .sub-courses li::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 50%;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--border);
+            transform: translateY(-50%);
+        }
+
+        a {
+            color: var(--link);
+            text-decoration: none;
+            transition: color 0.15s;
+        }
+
+        a:hover { color: var(--link-hover); text-decoration: underline; }
+
+        .section-label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text);
+            margin: 1rem 0 0.4rem;
+        }
+
+        .resource-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.6rem;
+            margin-top: 0.5rem;
+        }
+
+        .resource-link {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.65rem 0.9rem;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            font-size: 0.88rem;
+            color: var(--link);
+            transition: border-color 0.15s, background 0.15s;
+        }
+
+        .resource-link:hover {
+            border-color: var(--link);
+            background: var(--surface-hover);
+            text-decoration: none;
+        }
+
+        .resource-link .icon { font-size: 1rem; flex-shrink: 0; }
+
+        .note {
+            font-size: 0.82rem;
+            color: var(--text-muted);
+            font-style: italic;
+            margin-top: 0.8rem;
+            padding-left: 0.3rem;
+        }
+
+        @media (max-width: 640px) {
+            .container { padding: 2rem 1rem 3rem; }
+            header h1 { font-size: 1.6rem; }
+            .resource-grid { grid-template-columns: 1fr; }
+            .card { padding: 1.3rem; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Google Cloud Professional ML Engineer</h1>
+            <p>Certification Learning Path &mdash; 18&ndash;24 weeks</p>
+        </header>
+
+        <div class="timeline">
+
+            <!-- Phase 1 -->
+            <div class="phase">
+                <div class="phase-dot"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="phase-label">Phase 1 &mdash; ML Foundations</span>
+                        <span class="duration">4&ndash;6 weeks</span>
+                    </div>
+                    <h2>
+                        <a href="https://www.coursera.org/specializations/machine-learning-introduction" target="_blank" rel="noopener">
+                            Machine Learning Specialization
+                        </a>
+                    </h2>
+                    <div class="provider">Andrew Ng &bull; Stanford &amp; DeepLearning.AI &bull; Coursera</div>
+                    <ul class="details">
+                        <li>3 courses: Supervised Learning, Advanced Algorithms, Unsupervised Learning</li>
+                        <li>Covers regression, classification, neural networks, decision trees, clustering</li>
+                        <li>Hands-on with Python, NumPy, scikit-learn, TensorFlow</li>
+                    </ul>
+                    <ul class="sub-courses">
+                        <li><a href="https://www.coursera.org/learn/machine-learning" target="_blank" rel="noopener">Supervised Machine Learning: Regression and Classification</a></li>
+                        <li><a href="https://www.coursera.org/learn/advanced-learning-algorithms" target="_blank" rel="noopener">Advanced Learning Algorithms</a></li>
+                        <li><a href="https://www.coursera.org/learn/unsupervised-learning-recommenders-reinforcement-learning" target="_blank" rel="noopener">Unsupervised Learning, Recommenders, Reinforcement Learning</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Phase 2 -->
+            <div class="phase">
+                <div class="phase-dot"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="phase-label">Phase 2 &mdash; Deep Learning</span>
+                        <span class="duration">4&ndash;5 weeks</span>
+                    </div>
+                    <h2>
+                        <a href="https://www.coursera.org/specializations/deep-learning" target="_blank" rel="noopener">
+                            Deep Learning Specialization
+                        </a>
+                    </h2>
+                    <div class="provider">Andrew Ng &bull; DeepLearning.AI &bull; Coursera</div>
+                    <ul class="details">
+                        <li>Pick 3 of 5 courses (skip CNNs &amp; Sequence Models &mdash; covered in Phase 3)</li>
+                    </ul>
+                    <ul class="sub-courses">
+                        <li><a href="https://www.coursera.org/learn/neural-networks-deep-learning" target="_blank" rel="noopener">Course 1: Neural Networks and Deep Learning</a></li>
+                        <li><a href="https://www.coursera.org/learn/deep-neural-network" target="_blank" rel="noopener">Course 2: Improving Deep Neural Networks</a></li>
+                        <li><a href="https://www.coursera.org/learn/machine-learning-projects" target="_blank" rel="noopener">Course 3: Structuring Machine Learning Projects</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Phase 3 -->
+            <div class="phase">
+                <div class="phase-dot"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="phase-label">Phase 3 &mdash; TensorFlow Hands-On</span>
+                        <span class="duration">3&ndash;4 weeks</span>
+                    </div>
+                    <h2>
+                        <a href="https://www.coursera.org/professional-certificates/tensorflow-in-practice" target="_blank" rel="noopener">
+                            DeepLearning.AI TensorFlow Developer Professional Certificate
+                        </a>
+                    </h2>
+                    <div class="provider">DeepLearning.AI &bull; Coursera</div>
+                    <ul class="details">
+                        <li>4 courses: CNNs, NLP, time series, real model building</li>
+                        <li>Heavy coding &mdash; builds on Phase 1 &amp; 2 theory</li>
+                    </ul>
+                    <ul class="sub-courses">
+                        <li><a href="https://www.coursera.org/learn/introduction-tensorflow" target="_blank" rel="noopener">Introduction to TensorFlow for AI, ML, and Deep Learning</a></li>
+                        <li><a href="https://www.coursera.org/learn/convolutional-neural-networks-tensorflow" target="_blank" rel="noopener">Convolutional Neural Networks in TensorFlow</a></li>
+                        <li><a href="https://www.coursera.org/learn/natural-language-processing-tensorflow" target="_blank" rel="noopener">Natural Language Processing in TensorFlow</a></li>
+                        <li><a href="https://www.coursera.org/learn/tensorflow-sequences-time-series-and-prediction" target="_blank" rel="noopener">Sequences, Time Series and Prediction</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Phase 4 -->
+            <div class="phase">
+                <div class="phase-dot"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="phase-label">Phase 4 &mdash; GCP ML Engineer Path</span>
+                        <span class="duration">5&ndash;6 weeks</span>
+                    </div>
+                    <h2>
+                        <a href="https://www.cloudskillsboost.google/paths/17" target="_blank" rel="noopener">
+                            Professional ML Engineer Learning Path
+                        </a>
+                    </h2>
+                    <div class="provider">Google Cloud Skills Boost</div>
+                    <ul class="details">
+                        <li>20 modules covering the full exam scope</li>
+                        <li>BigQuery ML, Vertex AI, Keras on GCP</li>
+                        <li>Feature Engineering, MLOps</li>
+                        <li>Generative AI (LLMs, Gen AI apps)</li>
+                        <li>Responsible AI (fairness, bias, privacy)</li>
+                    </ul>
+
+                    <div class="section-label">Supplementary</div>
+                    <h2 style="font-size:1.1rem;">
+                        <a href="https://www.coursera.org/professional-certificates/preparing-for-google-cloud-machine-learning-engineer-professional-certificate" target="_blank" rel="noopener">
+                            Preparing for Google Cloud Certification: ML Engineer
+                        </a>
+                    </h2>
+                    <div class="provider">Google Cloud &bull; Coursera</div>
+                    <p class="note">Google's own bundled Coursera program &mdash; use to fill gaps, not both end-to-end.</p>
+                </div>
+            </div>
+
+            <!-- Phase 5 -->
+            <div class="phase">
+                <div class="phase-dot"></div>
+                <div class="card">
+                    <div class="card-header">
+                        <span class="phase-label">Phase 5 &mdash; Exam Prep</span>
+                        <span class="duration">2&ndash;3 weeks</span>
+                    </div>
+                    <h2>Final Review &amp; Certification</h2>
+                    <div class="resource-grid">
+                        <a class="resource-link" href="https://cloud.google.com/learn/certification/guides/machine-learning-engineer" target="_blank" rel="noopener">
+                            <span class="icon">&#128203;</span> Official Exam Guide
+                        </a>
+                        <a class="resource-link" href="https://docs.google.com/forms/d/e/1FAIpQLSeYTMRKbbMKEsSsWHHVbOFEBnLfBjPDl9_sGNI_ACLjRBQovQ/viewform" target="_blank" rel="noopener">
+                            <span class="icon">&#10004;</span> Sample Questions
+                        </a>
+                        <a class="resource-link" href="https://cloudonair.withgoogle.com/" target="_blank" rel="noopener">
+                            <span class="icon">&#127909;</span> Cloud OnAir Webinars
+                        </a>
+                        <a class="resource-link" href="https://www.wiley.com/en-us/Official+Google+Cloud+Certified+Professional+Machine+Learning+Engineer+Study+Guide-p-9781119868446" target="_blank" rel="noopener">
+                            <span class="icon">&#128214;</span> Wiley Study Guide
+                        </a>
+                        <a class="resource-link" href="https://cloud.google.com/learn/certification/machine-learning-engineer" target="_blank" rel="noopener" style="grid-column: 1 / -1;">
+                            <span class="icon">&#127891;</span> Register for Exam ($200)
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</body>
+</html>
