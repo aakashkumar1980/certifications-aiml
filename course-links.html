@@ -6,19 +6,20 @@
     <title>Google Cloud ML Engineer Certification — Learning Path</title>
     <style>
         :root {
-            --bg: #0f172a;
-            --surface: #1e293b;
-            --surface-hover: #273549;
-            --border: #334155;
-            --text: #e2e8f0;
-            --text-muted: #94a3b8;
-            --accent-1: #818cf8;
-            --accent-2: #38bdf8;
-            --accent-3: #34d399;
-            --accent-4: #fb923c;
-            --accent-5: #f472b6;
-            --link: #60a5fa;
-            --link-hover: #93c5fd;
+            --bg: #f8fafc;
+            --surface: #ffffff;
+            --surface-hover: #f1f5f9;
+            --border: #e2e8f0;
+            --border-hover: #cbd5e1;
+            --text: #1e293b;
+            --text-muted: #64748b;
+            --accent-1: #6366f1;
+            --accent-2: #0284c7;
+            --accent-3: #059669;
+            --accent-4: #ea580c;
+            --accent-5: #db2777;
+            --link: #2563eb;
+            --link-hover: #1d4ed8;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -89,23 +90,24 @@
             z-index: 1;
         }
 
-        .phase:nth-child(1) .phase-dot { background: var(--accent-1); box-shadow: 0 0 10px var(--accent-1); }
-        .phase:nth-child(2) .phase-dot { background: var(--accent-2); box-shadow: 0 0 10px var(--accent-2); }
-        .phase:nth-child(3) .phase-dot { background: var(--accent-3); box-shadow: 0 0 10px var(--accent-3); }
-        .phase:nth-child(4) .phase-dot { background: var(--accent-4); box-shadow: 0 0 10px var(--accent-4); }
-        .phase:nth-child(5) .phase-dot { background: var(--accent-5); box-shadow: 0 0 10px var(--accent-5); }
+        .phase:nth-child(1) .phase-dot { background: var(--accent-1); box-shadow: 0 0 0 3px rgba(99,102,241,0.2); }
+        .phase:nth-child(2) .phase-dot { background: var(--accent-2); box-shadow: 0 0 0 3px rgba(2,132,199,0.2); }
+        .phase:nth-child(3) .phase-dot { background: var(--accent-3); box-shadow: 0 0 0 3px rgba(5,150,105,0.2); }
+        .phase:nth-child(4) .phase-dot { background: var(--accent-4); box-shadow: 0 0 0 3px rgba(234,88,12,0.2); }
+        .phase:nth-child(5) .phase-dot { background: var(--accent-5); box-shadow: 0 0 0 3px rgba(219,39,119,0.2); }
 
         .card {
             background: var(--surface);
             border: 1px solid var(--border);
             border-radius: 12px;
             padding: 1.8rem;
-            transition: transform 0.2s, border-color 0.2s;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+            transition: transform 0.2s, box-shadow 0.2s;
         }
 
         .card:hover {
             transform: translateY(-2px);
-            border-color: var(--text-muted);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
         }
 
         .phase:nth-child(1) .card { border-top: 3px solid var(--accent-1); }
@@ -133,11 +135,11 @@
             display: inline-block;
         }
 
-        .phase:nth-child(1) .phase-label { color: var(--accent-1); background: rgba(129,140,248,0.12); }
-        .phase:nth-child(2) .phase-label { color: var(--accent-2); background: rgba(56,189,248,0.12); }
-        .phase:nth-child(3) .phase-label { color: var(--accent-3); background: rgba(52,211,153,0.12); }
-        .phase:nth-child(4) .phase-label { color: var(--accent-4); background: rgba(251,146,60,0.12); }
-        .phase:nth-child(5) .phase-label { color: var(--accent-5); background: rgba(244,114,182,0.12); }
+        .phase:nth-child(1) .phase-label { color: var(--accent-1); background: rgba(99,102,241,0.1); }
+        .phase:nth-child(2) .phase-label { color: var(--accent-2); background: rgba(2,132,199,0.1); }
+        .phase:nth-child(3) .phase-label { color: var(--accent-3); background: rgba(5,150,105,0.1); }
+        .phase:nth-child(4) .phase-label { color: var(--accent-4); background: rgba(234,88,12,0.1); }
+        .phase:nth-child(5) .phase-label { color: var(--accent-5); background: rgba(219,39,119,0.1); }
 
         .duration {
             font-size: 0.8rem;
@@ -157,7 +159,7 @@
             transition: color 0.15s;
         }
 
-        .card h2 a:hover { color: var(--link-hover); }
+        .card h2 a:hover { color: var(--link); }
 
         .provider {
             font-size: 0.85rem;
@@ -178,7 +180,7 @@
         }
 
         .details li::before {
-            content: '›';
+            content: '\203A';
             position: absolute;
             left: 0.2rem;
             color: var(--text-muted);
@@ -204,7 +206,7 @@
             width: 6px;
             height: 6px;
             border-radius: 50%;
-            background: var(--border);
+            background: var(--border-hover);
             transform: translateY(-50%);
         }
 
@@ -242,12 +244,13 @@
             border-radius: 8px;
             font-size: 0.88rem;
             color: var(--link);
-            transition: border-color 0.15s, background 0.15s;
+            transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
         }
 
         .resource-link:hover {
             border-color: var(--link);
             background: var(--surface-hover);
+            box-shadow: 0 2px 6px rgba(37,99,235,0.08);
             text-decoration: none;
         }
 
@@ -400,10 +403,10 @@
                     </div>
                     <h2>Final Review &amp; Certification</h2>
                     <div class="resource-grid">
-                        <a class="resource-link" href="https://cloud.google.com/learn/certification/guides/machine-learning-engineer" target="_blank" rel="noopener">
-                            <span class="icon">&#128203;</span> Official Exam Guide
+                        <a class="resource-link" href="https://services.google.com/fh/files/misc/professional_machine_learning_engineer_exam_guide_english.pdf" target="_blank" rel="noopener">
+                            <span class="icon">&#128203;</span> Official Exam Guide (PDF)
                         </a>
-                        <a class="resource-link" href="https://docs.google.com/forms/d/e/1FAIpQLSeYTMRKbbMKEsSsWHHVbOFEBnLfBjPDl9_sGNI_ACLjRBQovQ/viewform" target="_blank" rel="noopener">
+                        <a class="resource-link" href="https://docs.google.com/forms/d/e/1FAIpQLSeYmkCANE81qSBqLW0g2X7RoskBX9yGYQu-m1TtsjMvHabGqg/viewform" target="_blank" rel="noopener">
                             <span class="icon">&#10004;</span> Sample Questions
                         </a>
                         <a class="resource-link" href="https://cloudonair.withgoogle.com/" target="_blank" rel="noopener">
