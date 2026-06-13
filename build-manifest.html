@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpsMind × Offer Engine — Build Manifest</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#EDF0EC;
+    --surface:#FFFFFF;
+    --ink:#151A22;
+    --ink-soft:#515A66;
+    --ink-faint:#8A93A0;
+    --line:#D6DBD4;
+    --line-soft:#E6EAE3;
+    --primary:#14746F;
+    --primary-deep:#0B4D49;
+    --primary-wash:#E2F0EE;
+    --fallback:#B65419;
+    --fallback-wash:#F6E7DA;
+    --display:'Space Grotesk',ui-sans-serif,system-ui,sans-serif;
+    --body:'IBM Plex Sans',ui-sans-serif,system-ui,sans-serif;
+    --mono:'IBM Plex Mono',ui-monospace,'SF Mono',Menlo,monospace;
+  }
+
+  *{box-sizing:border-box;}
+  html{scroll-behavior:smooth;scroll-padding-top:84px;}
+  body{
+    margin:0;
+    background:var(--paper);
+    color:var(--ink);
+    font-family:var(--body);
+    font-size:16px;
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;text-decoration:none;}
+
+  /* ---------- top nav ---------- */
+  .topbar{
+    position:sticky;top:0;z-index:50;
+    background:rgba(237,240,236,0.86);
+    backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line);
+  }
+  .topbar__inner{
+    max-width:1060px;margin:0 auto;padding:12px 28px;
+    display:flex;align-items:center;gap:20px;flex-wrap:wrap;
+  }
+  .topbar__brand{
+    font-family:var(--mono);font-size:12px;letter-spacing:0.12em;
+    text-transform:uppercase;color:var(--primary-deep);font-weight:500;
+    white-space:nowrap;
+  }
+  .topbar__links{display:flex;gap:18px;flex-wrap:wrap;margin-left:auto;}
+  .topbar__links a{
+    font-family:var(--mono);font-size:12px;letter-spacing:0.04em;
+    color:var(--ink-soft);padding:3px 0;border-bottom:2px solid transparent;
+    transition:color .15s,border-color .15s;
+  }
+  .topbar__links a:hover{color:var(--primary);border-color:var(--primary);}
+
+  /* ---------- shell ---------- */
+  .wrap{max-width:1060px;margin:0 auto;padding:0 28px;}
+
+  /* ---------- masthead ---------- */
+  .masthead{
+    position:relative;overflow:hidden;
+    border-bottom:1px solid var(--line);
+    background:
+      linear-gradient(transparent 0,transparent calc(100% - 1px),var(--line-soft) 100%),
+      linear-gradient(90deg,transparent 0,transparent calc(100% - 1px),var(--line-soft) 100%);
+    background-size:34px 34px;
+  }
+  .masthead__inner{max-width:1060px;margin:0 auto;padding:60px 28px 48px;position:relative;}
+  .eyebrow{
+    font-family:var(--mono);font-size:12px;letter-spacing:0.18em;text-transform:uppercase;
+    color:var(--fallback);margin:0 0 18px;
+  }
+  .masthead h1{
+    font-family:var(--display);font-weight:600;letter-spacing:-0.02em;
+    font-size:clamp(2.1rem,5.4vw,3.5rem);line-height:1.02;margin:0 0 10px;
+  }
+  .masthead h1 .x{color:var(--primary);font-weight:400;padding:0 .15em;}
+  .masthead__sub{
+    font-size:1.05rem;color:var(--ink-soft);max-width:54ch;margin:0 0 26px;
+  }
+  .path{
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+    font-family:var(--mono);font-size:13px;color:var(--ink);margin-bottom:26px;
+  }
+  .path__node{background:var(--surface);border:1px solid var(--line);border-radius:2px;padding:5px 11px;}
+  .path__node.is-fallback{border-color:var(--fallback);color:var(--fallback);}
+  .path__arrow{color:var(--ink-faint);}
+  .chips{display:flex;gap:8px;flex-wrap:wrap;}
+  .chip{
+    font-family:var(--mono);font-size:11.5px;letter-spacing:0.04em;
+    border:1px solid var(--line);border-radius:100px;padding:4px 12px;color:var(--ink-soft);
+    background:var(--surface);
+  }
+
+  /* ---------- legend ---------- */
+  .legend{
+    display:flex;gap:26px;flex-wrap:wrap;align-items:center;
+    padding:16px 0;margin:0;border-bottom:1px solid var(--line);
+    font-size:13.5px;color:var(--ink-soft);
+  }
+  .legend__item{display:flex;align-items:center;gap:9px;}
+  .swatch{width:13px;height:13px;border-radius:3px;flex:none;}
+  .swatch--p{background:var(--primary);}
+  .swatch--a{background:#C3CABF;}
+  .swatch--f{background:var(--fallback);}
+
+  /* ---------- sections ---------- */
+  section{padding:54px 0;border-bottom:1px solid var(--line);}
+  .sec-head{display:flex;align-items:baseline;gap:16px;margin-bottom:6px;}
+  .sec-num{
+    font-family:var(--mono);font-size:13px;color:var(--fallback);
+    letter-spacing:0.1em;padding-top:6px;
+  }
+  .sec-head h2{
+    font-family:var(--display);font-weight:600;letter-spacing:-0.015em;
+    font-size:clamp(1.5rem,3.2vw,2rem);margin:0;
+  }
+  .sec-lede{color:var(--ink-soft);max-width:62ch;margin:6px 0 30px;}
+  .sec-lede.indent{margin-left:0;}
+
+  /* ---------- part / chapter list ---------- */
+  .part{margin-bottom:34px;}
+  .part__tag{
+    display:inline-block;font-family:var(--mono);font-size:11.5px;letter-spacing:0.14em;
+    text-transform:uppercase;color:var(--surface);background:var(--primary-deep);
+    padding:5px 12px;border-radius:2px;margin-bottom:4px;
+  }
+  .part__tag.is-shared{background:var(--fallback);}
+  .part__tag.is-cloud{background:var(--ink);}
+  .part__title{
+    font-family:var(--display);font-weight:500;font-size:1.15rem;margin:8px 0 2px;
+  }
+  .part__note{font-size:13.5px;color:var(--ink-faint);font-family:var(--mono);margin:0 0 18px;}
+
+  .ch{
+    display:grid;grid-template-columns:54px 1fr;gap:0 20px;
+    padding:18px 0;border-top:1px solid var(--line-soft);
+  }
+  .ch:first-of-type{border-top:1px solid var(--line);}
+  .ch__no{
+    font-family:var(--mono);font-size:13px;color:var(--primary);font-weight:500;
+    padding-top:2px;
+  }
+  .ch__body h3{
+    font-family:var(--display);font-weight:500;font-size:1.08rem;margin:0 0 8px;letter-spacing:-0.01em;
+  }
+  .ch__subs{list-style:none;margin:0;padding:0;display:grid;gap:5px;}
+  .ch__subs li{
+    font-size:14.5px;color:var(--ink-soft);display:flex;gap:10px;align-items:baseline;
+  }
+  .ch__subs li .id{
+    font-family:var(--mono);font-size:12px;color:var(--ink-faint);flex:none;min-width:30px;
+  }
+
+  /* ---------- spec table (the signature) ---------- */
+  .spec{margin-top:10px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:var(--surface);}
+  .spec__row{
+    display:grid;grid-template-columns:1.05fr 1.1fr 1.9fr 1.35fr;
+    border-top:1px solid var(--line-soft);
+  }
+  .spec__row:first-child{border-top:none;}
+  .spec__head{
+    background:var(--ink);color:#EDEFF2;
+  }
+  .spec__head .cell{
+    font-family:var(--mono);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;
+    color:#C7CDD6;padding:13px 16px;
+  }
+  .spec__head .cell.is-primary{color:#7FD8D1;}
+  .spec__head .cell.is-fallback{color:#E9B488;}
+  .cell{padding:15px 16px;border-left:1px solid var(--line-soft);}
+  .cell:first-child{border-left:none;}
+  .cell__layer{font-weight:600;font-size:14.5px;line-height:1.3;}
+  .cell__uc{display:block;font-family:var(--mono);font-size:11px;color:var(--ink-faint);margin-top:4px;letter-spacing:0.03em;}
+
+  .pkg{
+    font-family:var(--mono);font-size:12.5px;line-height:1.7;
+    display:inline-flex;align-items:center;border-radius:3px;padding:2px 8px;margin:2px 5px 2px 0;
+    border:1px solid var(--line);background:#FBFCFB;color:var(--ink);white-space:nowrap;
+  }
+  .pkg--primary{border-color:var(--primary);background:var(--primary-wash);color:var(--primary-deep);font-weight:500;}
+  .pkg--fallback{border-color:var(--fallback);background:var(--fallback-wash);color:#7A3A12;font-weight:500;}
+  .cell__note{display:block;font-size:12px;color:var(--ink-faint);margin-top:7px;line-height:1.4;}
+
+  /* ---------- callout ---------- */
+  .note{
+    margin-top:26px;border-left:3px solid var(--fallback);background:var(--surface);
+    padding:16px 20px;border-radius:0 4px 4px 0;font-size:14.5px;color:var(--ink-soft);
+  }
+  .note strong{color:var(--ink);font-weight:600;}
+
+  /* ---------- footer ---------- */
+  footer{padding:40px 0 70px;}
+  .foot{font-family:var(--mono);font-size:12px;color:var(--ink-faint);letter-spacing:0.03em;line-height:1.8;}
+
+  /* ---------- responsive ---------- */
+  @media (max-width:760px){
+    .spec__row{grid-template-columns:1fr;}
+    .spec__head{display:none;}
+    .cell{border-left:none;border-top:1px solid var(--line-soft);}
+    .cell:first-child{border-top:none;background:#F4F6F3;}
+    .cell[data-label]::before{
+      content:attr(data-label);display:block;
+      font-family:var(--mono);font-size:10.5px;letter-spacing:0.08em;text-transform:uppercase;
+      color:var(--ink-faint);margin-bottom:7px;
+    }
+    .ch{grid-template-columns:1fr;gap:8px;}
+    .ch__no{padding-top:0;}
+  }
+
+  @media (prefers-reduced-motion:reduce){
+    html{scroll-behavior:auto;}
+    *{animation:none!important;transition:none!important;}
+  }
+
+  /* gentle load reveal */
+  .reveal{opacity:0;transform:translateY(8px);animation:rise .6s ease forwards;}
+  @keyframes rise{to{opacity:1;transform:none;}}
+
+  @media print{
+    .topbar{position:static;}
+    body{background:#fff;}
+    section{break-inside:avoid;}
+    .spec,.ch,.part{break-inside:avoid;}
+  }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar__inner">
+    <span class="topbar__brand">Build Manifest · v1</span>
+    <nav class="topbar__links">
+      <a href="#install">Install</a>
+      <a href="#opsmind">OpsMind</a>
+      <a href="#offers">Offer Engine</a>
+      <a href="#port">GCP Port</a>
+      <a href="#stack">Stack &amp; Fallbacks</a>
+      <a href="#llms">LLMs</a>
+    </nav>
+  </div>
+</div>
+
+<header class="masthead">
+  <div class="masthead__inner reveal">
+    <p class="eyebrow">Local-first build guide · two use cases</p>
+    <h1>OpsMind<span class="x">×</span>Offer Engine</h1>
+    <p class="masthead__sub">A build sequence for two agentic-AI projects — an autonomous SRE engine and a real-time credit-card offer engine — written to run on whatever your company repo actually has, and to fall back to pure Python when it doesn't.</p>
+    <div class="path">
+      <span class="path__node">Company laptop · internal proxy</span>
+      <span class="path__arrow">→</span>
+      <span class="path__node">Core logic on mock data</span>
+      <span class="path__arrow">→</span>
+      <span class="path__node is-fallback">Personal laptop · GCP rewrite</span>
+    </div>
+    <div class="chips">
+      <span class="chip">Use Case 1 · OpsMind</span>
+      <span class="chip">Use Case 3 · Offer Engine</span>
+      <span class="chip">Synthetic data only</span>
+      <span class="chip">Use Case 2 omitted</span>
+    </div>
+  </div>
+</header>
+
+<div class="wrap">
+  <p class="legend">
+    <span class="legend__item"><span class="swatch swatch--p"></span> Default / primary path</span>
+    <span class="legend__item"><span class="swatch swatch--a"></span> Alternatives — use whatever the repo mirrors</span>
+    <span class="legend__item"><span class="swatch swatch--f"></span> Pure-Python fallback — no external dependency</span>
+  </p>
+</div>
+
+<!-- ============ CH 1 INSTALL ============ -->
+<div class="wrap">
+<section id="install">
+  <div class="sec-head"><span class="sec-num">PART 0</span><h2>Chapter 1 — Local Installation &amp; Setup</h2></div>
+  <p class="sec-lede">The shared foundation for both use cases, built on the company laptop. Keep everything generic and synthetic so the Month-3 GCP rewrite stays clean.</p>
+
+  <div class="part">
+    <span class="part__tag is-shared">Shared · company laptop</span>
+    <div class="ch">
+      <div class="ch__no">1</div>
+      <div class="ch__body">
+        <h3>Local Installation &amp; Environment Setup</h3>
+        <ul class="ch__subs">
+          <li><span class="id">1.1</span> Python virtualenv and project layout</li>
+          <li><span class="id">1.2</span> Pulling libraries from the company Artifactory</li>
+          <li><span class="id">1.3</span> Connecting to the internal LLM proxy (base_url + token)</li>
+          <li><span class="id">1.4</span> Hello-world: first tool-calling completion</li>
+          <li><span class="id">1.5</span> Local git, .gitignore, and the synthetic-data-only rules</li>
+          <li><span class="id">1.6</span> Reusable scaffolding — config, logging, mock-data generators</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+</div>
+
+<!-- ============ OPSMIND ============ -->
+<div class="wrap">
+<section id="opsmind">
+  <div class="sec-head"><span class="sec-num">PART I</span><h2>OpsMind — Autonomous SRE Multi-Agent Engine</h2></div>
+  <p class="sec-lede">Use Case 1. A production incident flows through a deterministic graph of agents: triage, log analysis, runbook RAG, code mapping, secure data access, and remediation, ending in a full RCA-to-fix report.</p>
+
+  <div class="part">
+    <span class="part__tag">Use Case 1 · company laptop</span>
+
+    <div class="ch"><div class="ch__no">2</div><div class="ch__body">
+      <h3>Architecture &amp; Agent Design</h3>
+      <ul class="ch__subs">
+        <li><span class="id">2.1</span> The incident lifecycle as a state graph</li>
+        <li><span class="id">2.2</span> Shared state object (the "ticket") and handoff contracts</li>
+        <li><span class="id">2.3</span> Deterministic routing vs. LLM reasoning — where each belongs</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">3</div><div class="ch__body">
+      <h3>Foundation &amp; Mock Environment</h3>
+      <ul class="ch__subs">
+        <li><span class="id">3.1</span> Synthetic Splunk-style log generator</li>
+        <li><span class="id">3.2</span> Mock tools: get_logs, query_runbooks, read_source, run_sql, create_jira, open_branch</li>
+        <li><span class="id">3.3</span> Building the graph skeleton — nodes, edges, entry/exit</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">4</div><div class="ch__body">
+      <h3>Triage &amp; Log Analysis Agents</h3>
+      <ul class="ch__subs">
+        <li><span class="id">4.1</span> Triage agent — classify, set severity, open mock channel</li>
+        <li><span class="id">4.2</span> Log-parsing agent and large-context RCA summarization</li>
+        <li><span class="id">4.3</span> Extracting structured signals from unstructured logs</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">5</div><div class="ch__body">
+      <h3>Runbook RAG &amp; RCA Branching</h3>
+      <ul class="ch__subs">
+        <li><span class="id">5.1</span> In-memory vector store for runbook history</li>
+        <li><span class="id">5.2</span> Similarity search and the found / not-found conditional edge</li>
+        <li><span class="id">5.3</span> "Why did it recur?" path vs. deep fresh-RCA path</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">6</div><div class="ch__body">
+      <h3>Code Mapping &amp; Secure Data Access</h3>
+      <ul class="ch__subs">
+        <li><span class="id">6.1</span> Mapping the error to class/line in the mock source repo</li>
+        <li><span class="id">6.2</span> Generating read-only SQL to pull point-in-time data</li>
+        <li><span class="id">6.3</span> Simulating the secure decrypt step (KMS-style boundary)</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">7</div><div class="ch__body">
+      <h3>Remediation &amp; Reporting</h3>
+      <ul class="ch__subs">
+        <li><span class="id">7.1</span> Proposing the fix and opening a mock Jira ticket + assignee</li>
+        <li><span class="id">7.2</span> Creating the production branch</li>
+        <li><span class="id">7.3</span> Generating the full RCA-to-fix report</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">8</div><div class="ch__body">
+      <h3>End-to-End Orchestration</h3>
+      <ul class="ch__subs">
+        <li><span class="id">8.1</span> Running a full incident through the graph</li>
+        <li><span class="id">8.2</span> Failure handling, retries, and guardrails</li>
+        <li><span class="id">8.3</span> Design-doc write-up — architecture, decisions, tradeoffs</li>
+      </ul>
+    </div></div>
+  </div>
+</section>
+</div>
+
+<!-- ============ OFFER ENGINE ============ -->
+<div class="wrap">
+<section id="offers">
+  <div class="sec-head"><span class="sec-num">PART II</span><h2>Real-Time Contextual Offer Engine</h2></div>
+  <p class="sec-lede">Use Case 3. Traditional ML predicts intent and propensity; generative AI personalizes the offer; an agent matches merchant promos to cardholders under compliance constraints.</p>
+
+  <div class="part">
+    <span class="part__tag">Use Case 3 · company laptop</span>
+
+    <div class="ch"><div class="ch__no">9</div><div class="ch__body">
+      <h3>Domain &amp; Architecture</h3>
+      <ul class="ch__subs">
+        <li><span class="id">9.1</span> The banking-offers problem and compliance constraints</li>
+        <li><span class="id">9.2</span> Splitting traditional ML (predict) from GenAI (personalize)</li>
+        <li><span class="id">9.3</span> Event-driven flow overview</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">10</div><div class="ch__body">
+      <h3>Module B — Propensity Scoring</h3>
+      <ul class="ch__subs">
+        <li><span class="id">10.1</span> Synthetic transaction + merchant-category dataset</li>
+        <li><span class="id">10.2</span> Training a propensity / conversion model</li>
+        <li><span class="id">10.3</span> Threshold logic that triggers the offer event</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">11</div><div class="ch__body">
+      <h3>Module A — Hyper-Personalized Copy Generation</h3>
+      <ul class="ch__subs">
+        <li><span class="id">11.1</span> Building the per-user prompt from spend history and profile</li>
+        <li><span class="id">11.2</span> Generating compliant offer copy with a GenAI step</li>
+        <li><span class="id">11.3</span> Grounding and guardrails for financial-advertising rules</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">12</div><div class="ch__body">
+      <h3>Module C — Merchant-Offer Matching Agent</h3>
+      <ul class="ch__subs">
+        <li><span class="id">12.1</span> Extracting terms from synthetic merchant promo briefs</li>
+        <li><span class="id">12.2</span> Categorizing target audience and mapping to cardholders</li>
+        <li><span class="id">12.3</span> Compliance check against internal-policy RAG</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">13</div><div class="ch__body">
+      <h3>Wiring the Engine Together</h3>
+      <ul class="ch__subs">
+        <li><span class="id">13.1</span> The score → event → personalize → match pipeline</li>
+        <li><span class="id">13.2</span> Local event bus (mock Kafka) simulation</li>
+        <li><span class="id">13.3</span> Design-doc write-up</li>
+      </ul>
+    </div></div>
+  </div>
+</section>
+</div>
+
+<!-- ============ GCP PORT ============ -->
+<div class="wrap">
+<section id="port">
+  <div class="sec-head"><span class="sec-num">PART III</span><h2>Porting to GCP — Use Cases 1 &amp; 3</h2></div>
+  <p class="sec-lede">The clean rewrite on your personal laptop. Same graph logic; swap the execution layer for Vertex AI, BigQuery ML, Document AI, and Cloud Run. Budget real time for auth and IAM — this is not a one-line swap.</p>
+
+  <div class="part">
+    <span class="part__tag is-cloud">Both use cases · personal laptop</span>
+
+    <div class="ch"><div class="ch__no">14</div><div class="ch__body">
+      <h3>GCP Setup</h3>
+      <ul class="ch__subs">
+        <li><span class="id">14.1</span> Free-trial project, billing, and enabling Vertex AI</li>
+        <li><span class="id">14.2</span> Application Default Credentials and service accounts</li>
+        <li><span class="id">14.3</span> IAM and project hygiene</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">15</div><div class="ch__body">
+      <h3>Porting OpsMind</h3>
+      <ul class="ch__subs">
+        <li><span class="id">15.1</span> Swapping the proxy LLM for ChatVertexAI (Gemini)</li>
+        <li><span class="id">15.2</span> In-memory store → Vertex AI Vector Search</li>
+        <li><span class="id">15.3</span> Mock tools → Cloud Run functions; storage → GCS</li>
+        <li><span class="id">15.4</span> Deploying an end-to-end demo URL</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">16</div><div class="ch__body">
+      <h3>Porting the Offer Engine</h3>
+      <ul class="ch__subs">
+        <li><span class="id">16.1</span> Propensity model → BigQuery ML</li>
+        <li><span class="id">16.2</span> Document extraction → Document AI</li>
+        <li><span class="id">16.3</span> Personalization → Vertex AI / Gemini with grounding</li>
+      </ul>
+    </div></div>
+
+    <div class="ch"><div class="ch__no">17</div><div class="ch__body">
+      <h3>Demo, Repo &amp; Talking Points</h3>
+      <ul class="ch__subs">
+        <li><span class="id">17.1</span> Public GitHub repo from the clean rewrite</li>
+        <li><span class="id">17.2</span> Per-project write-ups and a demo video</li>
+        <li><span class="id">17.3</span> Interview narrative — and how the artifacts feed an NIW / EB-1A file</li>
+      </ul>
+    </div></div>
+  </div>
+</section>
+</div>
+
+<!-- ============ STACK ============ -->
+<div class="wrap">
+<section id="stack">
+  <div class="sec-head"><span class="sec-num">REF A</span><h2>Stack &amp; Fallbacks</h2></div>
+  <p class="sec-lede">Only three layers truly need the repo — an LLM client, an orchestration approach, and a vector store — and each has a zero-dependency fallback. Everything heavier is an upgrade, not a blocker.</p>
+
+  <div class="spec">
+    <div class="spec__row spec__head">
+      <div class="cell">Layer</div>
+      <div class="cell is-primary">Primary (default)</div>
+      <div class="cell">Alternatives (whatever the repo mirrors)</div>
+      <div class="cell is-fallback">Pure-Python fallback</div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Agent orchestration</span><span class="cell__uc">UC1 brain · UC3 Module C</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">LangGraph</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">LangChain AgentExecutor</span><span class="pkg">CrewAI</span><span class="pkg">AutoGen / AG2</span><span class="pkg">LlamaIndex Workflows</span><span class="pkg">Pydantic AI</span><span class="pkg">smolagents</span><span class="pkg">Semantic Kernel</span><span class="pkg">Haystack</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">hand-rolled state machine</span><span class="cell__note">dict of state + functions + a while-loop dispatcher. Most interview-impressive — you own the mechanics.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">LLM client / proxy</span><span class="cell__uc">all projects</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">langchain-openai</span><span class="cell__note">ChatOpenAI(base_url=…)</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">openai SDK</span><span class="pkg">LiteLLM</span><span class="pkg">ChatLiteLLM</span><span class="pkg">instructor</span><span class="pkg">httpx</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">urllib.request</span><span class="cell__note">stdlib POST to the proxy REST endpoint. The proxy speaks HTTP — you can always hit it directly.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Structured outputs</span><span class="cell__uc">tickets · extracted terms</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">pydantic</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">jsonschema</span><span class="pkg">attrs</span><span class="pkg">marshmallow</span><span class="pkg">instructor</span><span class="pkg">outlines</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">dataclasses + TypedDict</span><span class="cell__note">stdlib types with manual validation in a few lines.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Vector store</span><span class="cell__uc">UC1 runbooks · UC3 policy RAG</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">ChromaDB</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">FAISS</span><span class="pkg">Qdrant</span><span class="pkg">LanceDB</span><span class="pkg">sqlite-vec</span><span class="pkg">Annoy</span><span class="pkg">hnswlib</span><span class="pkg">pgvector</span><span class="pkg">Milvus Lite</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">numpy cosine similarity</span><span class="cell__note">For a few hundred mock runbooks this is genuinely fine.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Embeddings</span><span class="cell__uc">feeds the vector store</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">sentence-transformers</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">proxy embeddings endpoint</span><span class="pkg">transformers</span><span class="pkg">FastEmbed</span><span class="pkg">spaCy vectors</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">TfidfVectorizer</span><span class="pkg pkg--fallback">Counter bag-of-words</span><span class="cell__note">sklearn TF-IDF, or stdlib collections.Counter for keyword retrieval — no model needed.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Propensity model</span><span class="cell__uc">UC3 Module B</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">XGBoost</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">sklearn HistGradientBoosting</span><span class="pkg">LightGBM</span><span class="pkg">CatBoost</span><span class="pkg">LogisticRegression</span><span class="pkg">statsmodels</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">numpy logistic regression</span><span class="cell__note">Or a weighted-score heuristic in stdlib. sklearn is almost always mirrored — make it the real default.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Data handling</span><span class="cell__uc">synthetic datasets</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">pandas</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">Polars</span><span class="pkg">NumPy</span><span class="pkg">PyArrow</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">csv + json</span><span class="cell__note">stdlib readers over lists of dicts.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Document / text extraction</span><span class="cell__uc">UC3 Module C</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">plain-text mock briefs</span><span class="cell__note">let the LLM extract — no OCR locally</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">pypdf</span><span class="pkg">pdfplumber</span><span class="pkg">PyMuPDF</span><span class="pkg">pdfminer.six</span><span class="pkg">unstructured</span><span class="pkg">pytesseract</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">.txt + regex</span><span class="cell__note">Author briefs as text; parse with str / re. Save real OCR for Document AI in the port.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Event bus (Kafka stand-in)</span><span class="cell__uc">UC1 event · UC3 trigger</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">queue.Queue</span><span class="cell__note">stdlib — already the simplest</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">kafka-python</span><span class="pkg">confluent-kafka</span><span class="pkg">redis pub/sub</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">asyncio.Queue</span><span class="cell__note">stdlib, no broker needed.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Mock tools / APIs</span><span class="cell__uc">Jira · Git · SQL stand-ins</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">plain functions</span><span class="cell__note">return canned dicts</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">FastAPI</span><span class="pkg">Flask</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">http.server</span><span class="cell__note">stdlib if you want a running endpoint.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Layer"><span class="cell__layer">Supporting bits</span><span class="cell__uc">config · retry · logging · tests</span></div>
+      <div class="cell" data-label="Primary"><span class="pkg pkg--primary">python-dotenv</span><span class="pkg pkg--primary">tenacity</span><span class="pkg pkg--primary">pytest</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">pydantic-settings</span><span class="pkg">backoff</span><span class="pkg">loguru</span><span class="pkg">structlog</span></div>
+      <div class="cell" data-label="Pure-Python fallback"><span class="pkg pkg--fallback">os.environ</span><span class="pkg pkg--fallback">logging</span><span class="pkg pkg--fallback">unittest</span><span class="cell__note">All have stdlib equivalents — never block on these.</span></div>
+    </div>
+  </div>
+
+  <p class="note"><strong>The floor:</strong> a bare repo with only <span style="font-family:var(--mono);font-size:13px">requests · numpy · pandas · scikit-learn</span> is enough to build both use cases end to end. Send me your actual <span style="font-family:var(--mono);font-size:13px">pip list</span> and I'll lock the stack to exactly what you have.</p>
+</section>
+</div>
+
+<!-- ============ LLMS ============ -->
+<div class="wrap">
+<section id="llms">
+  <div class="sec-head"><span class="sec-num">REF B</span><h2>Alternative LLMs</h2></div>
+  <p class="sec-lede">The orchestration code never changes — you only swap the client and the model string. Pick by what your proxy exposes locally, then by what Vertex offers in the port. Treat version numbers as "or newest available."</p>
+
+  <div class="spec">
+    <div class="spec__row spec__head">
+      <div class="cell">Access path</div>
+      <div class="cell is-primary">Default pick</div>
+      <div class="cell">Alternatives</div>
+      <div class="cell is-fallback">Notes</div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Access path"><span class="cell__layer">Via company internal proxy</span><span class="cell__uc">no download · Months 1–2</span></div>
+      <div class="cell" data-label="Default pick"><span class="pkg pkg--primary">GPT-4-class (proxy)</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">Azure OpenAI</span><span class="pkg">Anthropic Claude</span><span class="pkg">Google Gemini</span><span class="pkg">Mistral Large</span><span class="pkg">Cohere Command</span></div>
+      <div class="cell" data-label="Notes"><span class="cell__note">Use whichever model id the proxy already routes. Same OpenAI-compatible client for most.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Access path"><span class="cell__layer">Self-hosted open weights</span><span class="cell__uc">Ollama · llama.cpp · vLLM · LM Studio</span></div>
+      <div class="cell" data-label="Default pick"><span class="pkg pkg--primary">Llama 3.x Instruct</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">Qwen2.5</span><span class="pkg">Mistral / Mixtral</span><span class="pkg">Gemma 2</span><span class="pkg">Phi-3.5</span><span class="pkg">DeepSeek</span></div>
+      <div class="cell" data-label="Notes"><span class="cell__note">Only if local download is permitted. Ollama exposes an OpenAI-compatible endpoint, so no code change.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Access path"><span class="cell__layer">GCP port target</span><span class="cell__uc">Vertex AI · Month 3</span></div>
+      <div class="cell" data-label="Default pick"><span class="pkg pkg--primary">Gemini 2.5 Flash</span><span class="cell__note">fast, cheap, strong tool-calling</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">Gemini 2.5 Pro</span><span class="pkg">Claude on Vertex</span><span class="pkg">Llama on Vertex</span></div>
+      <div class="cell" data-label="Notes"><span class="cell__note">Flash for the agent loops; Pro only for the hardest RCA reasoning to control cost.</span></div>
+    </div>
+
+    <div class="spec__row">
+      <div class="cell" data-label="Access path"><span class="cell__layer">Pure-Python fallback</span><span class="cell__uc">no SDK at all</span></div>
+      <div class="cell" data-label="Default pick"><span class="pkg pkg--fallback">raw HTTP to any endpoint</span></div>
+      <div class="cell" data-label="Alternatives"><span class="pkg">urllib.request</span><span class="pkg">http.client</span></div>
+      <div class="cell" data-label="Notes"><span class="cell__note">Every provider above is a JSON-over-HTTP call. One stdlib function reaches all of them.</span></div>
+    </div>
+  </div>
+</section>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p class="foot">
+      Build Manifest v1 · Use Case 1 (OpsMind) + Use Case 3 (Offer Engine) · Use Case 2 omitted by request<br>
+      Local-first on company laptop → clean GCP rewrite on personal laptop · synthetic data only<br>
+      Next: Chapter 1 setup commands + starter code once the repo stack is confirmed.
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
